@@ -5,6 +5,7 @@ import com.balakshievas.jelenoid.dto.SessionInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -14,7 +15,6 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class SessionService {
@@ -30,7 +30,14 @@ public class SessionService {
     @Autowired
     private RestClient restClient;
 
-    private final Map<String, SessionInfo> activeSessions = new ConcurrentHashMap<>();
+    @Autowired
+    private ActiveSessionsService activeSessionsService;
+
+    @Value("${server.address:localhost}")
+    private String serverAddress;
+
+    @Value("${server.port:8080}")
+    private int serverPort;
 
     public Map<String, Object> createSession(Map<String, Object> requestBody) {
         String image = findImageForRequest(requestBody);
@@ -49,7 +56,8 @@ public class SessionService {
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(requestBody)
                     .retrieve()
-                    .toEntity(new ParameterizedTypeReference<>() {});
+                    .toEntity(new ParameterizedTypeReference<>() {
+                    });
 
             Map<String, Object> responseValue = (Map<String, Object>) responseFromContainer.getBody().get("value");
             String remoteSessionId = (String) responseValue.get("sessionId");
@@ -59,10 +67,27 @@ public class SessionService {
             }
 
             String hubSessionId = UUID.randomUUID().toString();
-            activeSessions.put(hubSessionId, new SessionInfo(containerInfo.getContainerId(), remoteSessionId));
+            activeSessionsService.putSession(hubSessionId, new SessionInfo(containerInfo.getContainerId(), remoteSessionId));
             log.info("Session created: hubId={} -> remoteId={} in container={}", hubSessionId, remoteSessionId, containerInfo.getContainerId());
 
+            Map<String, Object> containerCapabilities = (Map<String, Object>) responseValue.get("capabilities");
+            if (containerCapabilities.containsKey("goog:chromeOptions")) {
+                Map<String, Object> chromeOptions = (Map<String, Object>) containerCapabilities.get("goog:chromeOptions");
+                if (chromeOptions.remove("debuggerAddress") != null) {
+                    log.info("Removed 'debuggerAddress' from capabilities to prevent client-side conflicts.");
+                }
+            }
+
+            // 2. Добавляем наш правильный WebSocket URL, как и раньше
+            String devToolsUrl = String.format("ws://%s:%d/session/%s/se/cdp", serverAddress, serverPort, hubSessionId);
+            containerCapabilities.put("se:cdp", devToolsUrl);
+            log.info("Advertising 'se:cdp' endpoint: {}", devToolsUrl);
+
+            // --- КОНЕЦ ИЗМЕНЕНИЙ ---
+
+            // 3. Подменяем sessionId, как и раньше
             responseValue.put("sessionId", hubSessionId);
+
             return Map.of("value", responseValue);
 
         } catch (Exception e) {
@@ -73,7 +98,7 @@ public class SessionService {
     }
 
     public void deleteSession(String hubSessionId) {
-        SessionInfo sessionInfo = activeSessions.remove(hubSessionId);
+        SessionInfo sessionInfo = activeSessionsService.removeSession(hubSessionId);
         if (sessionInfo != null) {
             log.info("Deleting session: hubId={} -> stopping container={}", hubSessionId, sessionInfo.getContainerId());
             containerManagerService.stopContainer(sessionInfo.getContainerId());
@@ -81,14 +106,14 @@ public class SessionService {
     }
 
     public ResponseEntity<byte[]> proxyRequest(String hubSessionId, HttpMethod method, String relativePath, HttpHeaders headers, byte[] body) {
-        SessionInfo sessionInfo = activeSessions.get(hubSessionId);
+        SessionInfo sessionInfo = activeSessionsService.getSession(hubSessionId);
         if (sessionInfo == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found: " + hubSessionId);
         }
 
         ContainerInfo containerInfo = containerManagerService.getActiveContainers().get(sessionInfo.getContainerId());
         if (containerInfo == null) {
-            activeSessions.remove(hubSessionId);
+            activeSessionsService.removeSession(hubSessionId);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Container for session " + hubSessionId + " is no longer active.");
         }
         containerInfo.updateActivity();

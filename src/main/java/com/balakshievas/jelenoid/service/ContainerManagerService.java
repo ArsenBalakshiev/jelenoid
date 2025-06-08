@@ -38,7 +38,7 @@ public class ContainerManagerService {
 
     private final RestClient restClient = RestClient.builder().build();
 
-    private final Map<String, ContainerInfo> activeContainers = new ConcurrentHashMap<>();
+    private static final Map<String, ContainerInfo> activeContainers = new ConcurrentHashMap<>();
 
     public Map<String, ContainerInfo> getActiveContainers() {
         return activeContainers;

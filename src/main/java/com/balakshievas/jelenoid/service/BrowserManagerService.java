@@ -21,8 +21,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class BrowserManagerService {
 
-    private final Map<String, BrowserInfo> defaultBrowsers = new ConcurrentHashMap<>();
-    private final Map<String, BrowserInfo> browserList = new ConcurrentHashMap<>();
+    private static final Map<String, BrowserInfo> defaultBrowsers = new ConcurrentHashMap<>();
+    private static final Map<String, BrowserInfo> browserList = new ConcurrentHashMap<>();
 
     @Autowired
     private ObjectMapper objectMapper;
