@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  # Ваше управляющее Spring Boot приложение
+  superselenoid-app:
+    build: . # Указывает на Dockerfile в текущей папке
+    container_name: superselenoid-app
+    ports:
+      # Пробрасываем порт вашего приложения на хост
+      - "8080:8080"
+      # Можно добавить порт для отладки
+      - "5005:5005"
+    volumes:
+      # Для горячей перезагрузки[4]
+      - ./src:/app/src
+      - ./target:/app/target
+      # Важно: пробрасываем сокет Docker, чтобы приложение могло управлять контейнерами
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      # Переменные для отладки
+      #- MAVEN_OPTS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005
+      # Передаем имя сети в приложение
+      - SUPERSELENOID_DOCKER_NETWORK=superselenoid-net
+    # Подключаем приложение к нашей сети
+    networks:
+      - superselenoid-net
+
+# Объявляем сеть
+networks:
+  superselenoid-net:
+    name: superselenoid-net
+    driver: bridge # Указываем, что сеть создана заранее
