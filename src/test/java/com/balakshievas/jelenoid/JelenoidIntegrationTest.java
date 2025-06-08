@@ -1,7 +1,6 @@
-package com.balakshievas.superselenoid;
+package com.balakshievas.jelenoid;
 
-import com.balakshievas.superselenoid.service.BrowserManagerService;
-import com.balakshievas.superselenoid.service.ContainerManagerService;
+import com.balakshievas.jelenoid.service.ContainerManagerService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.openqa.selenium.By;
@@ -12,7 +11,6 @@ import org.openqa.selenium.remote.RemoteWebDriver;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -24,18 +22,12 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// Активируем поддержку Testcontainers для JUnit 5
 @Testcontainers
-// Запускаем полное Spring Boot приложение на случайном порту
-//@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-class SuperSelenoidIntegrationTest {
+class JelenoidIntegrationTest {
 
     // Внедряем порт, на котором запустилось наше приложение
     @LocalServerPort
     private int port;
-
-    @Autowired
-    private ContainerManagerService containerManager;
 
     @Test
     @DisplayName("Полный цикл: создание сессии, проксирование команды и удаление сессии")
@@ -82,10 +74,10 @@ class SuperSelenoidIntegrationTest {
     @Test
     @DisplayName("Комплексное взаимодействие с формой")
     void shouldPerformComplexPageInteractions() throws MalformedURLException {
-        URL hubUrl = new URL("http://localhost:" + port + "/wd/hub");
+        URL hubUrl = new URL("http://localhost:8080/wd/hub");
         ChromeOptions chromeOptions = new ChromeOptions();
         chromeOptions.setCapability("browserName", "chrome");
-        chromeOptions.setCapability("browserVersion", "125.0"); // Убедитесь, что версия верна
+        chromeOptions.setCapability("browserVersion", "133"); // Убедитесь, что версия верна
 
         WebDriver driver = null;
         try {

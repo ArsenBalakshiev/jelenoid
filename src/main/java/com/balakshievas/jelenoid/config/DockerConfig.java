@@ -1,4 +1,4 @@
-package com.balakshievas.superselenoid.config;
+package com.balakshievas.jelenoid.config;
 
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.core.DefaultDockerClientConfig;

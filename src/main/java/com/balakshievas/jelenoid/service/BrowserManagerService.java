@@ -1,14 +1,13 @@
-package com.balakshievas.superselenoid.service;
+package com.balakshievas.jelenoid.service;
 
-import com.balakshievas.superselenoid.config.BrowserProperties;
-import com.balakshievas.superselenoid.dto.BrowserInfo;
+import com.balakshievas.jelenoid.config.BrowserProperties;
+import com.balakshievas.jelenoid.dto.BrowserInfo;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
 import org.springframework.core.io.Resource;
@@ -44,7 +43,7 @@ public class BrowserManagerService {
         // Если путь не указан в конфигурации, используем путь по умолчанию из classpath
         if (configPath == null || configPath.isBlank()) {
             resourcePath = "classpath:browsers.json";
-            log.info("Свойство 'superselenoid.browsers.config-dir' не установлено. Используется файл по умолчанию: {}", resourcePath);
+            log.info("Свойство 'jelenoid.browsers.config-dir' не установлено. Используется файл по умолчанию: {}", resourcePath);
         } else {
             // Если путь указан, формируем его с префиксом 'file:' для загрузки из файловой системы.
             // Заменяем обратные слэши для совместимости с Windows.

@@ -1,4 +1,4 @@
-package com.balakshievas.superselenoid.service;
+package com.balakshievas.jelenoid.service;
 
 import com.github.dockerjava.api.DockerClient;
 import org.springframework.boot.actuate.health.Health;

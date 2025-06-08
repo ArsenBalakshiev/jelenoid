@@ -1,11 +1,11 @@
 server:
-  port: ${SELENOID_PORT:8080}
+  port: ${JELENOID_PORT:8080}
 
 spring:
   application:
-    name: superselenoid
+    name: jelenoid
 
-superselenoid:
+jelenoid:
   browsers:
     config-dir: ${BROWSERS_FILE:}
   timeouts:

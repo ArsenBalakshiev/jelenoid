@@ -9,10 +9,10 @@
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.balakshievas</groupId>
-	<artifactId>superselenoid</artifactId>
+	<artifactId>jelenoid</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name>superselenoid</name>
-	<description>superselenoid</description>
+	<name>jelenoid</name>
+	<description>jelenoid</description>
 	<url/>
 	<licenses>
 		<license/>
@@ -116,7 +116,7 @@
 				<configuration>
 					<excludeDevtools>false</excludeDevtools>
 					<jvmArguments>
-						-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005
+						-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
 					</jvmArguments>
 				</configuration>
 			</plugin>

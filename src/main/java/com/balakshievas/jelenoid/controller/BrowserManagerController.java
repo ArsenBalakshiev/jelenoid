@@ -1,7 +1,7 @@
-package com.balakshievas.superselenoid.controller;
+package com.balakshievas.jelenoid.controller;
 
-import com.balakshievas.superselenoid.dto.BrowserInfo;
-import com.balakshievas.superselenoid.service.BrowserManagerService;
+import com.balakshievas.jelenoid.dto.BrowserInfo;
+import com.balakshievas.jelenoid.service.BrowserManagerService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

@@ -1,10 +1,10 @@
-package com.balakshievas.superselenoid.config;
+package com.balakshievas.jelenoid.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@ConfigurationProperties(prefix = "superselenoid.browsers")
+@ConfigurationProperties(prefix = "jelenoid.browsers")
 public class BrowserProperties {
 
     private String configDir;

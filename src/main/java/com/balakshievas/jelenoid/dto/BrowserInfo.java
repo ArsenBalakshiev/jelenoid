@@ -1,4 +1,4 @@
-package com.balakshievas.superselenoid.dto;
+package com.balakshievas.jelenoid.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

@@ -2,9 +2,9 @@ version: '3.8'
 
 services:
   # Ваше управляющее Spring Boot приложение
-  superselenoid-app:
+  jelenoid-app:
     build: . # Указывает на Dockerfile в текущей папке
-    container_name: superselenoid-app
+    container_name: jelenoid-app
     ports:
       # Пробрасываем порт вашего приложения на хост
       - "8080:8080"
@@ -20,13 +20,13 @@ services:
       # Переменные для отладки
       #- MAVEN_OPTS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005
       # Передаем имя сети в приложение
-      - SUPERSELENOID_DOCKER_NETWORK=superselenoid-net
+      - JELENOID_DOCKER_NETWORK=jelenoid-net
     # Подключаем приложение к нашей сети
     networks:
-      - superselenoid-net
+      - jelenoid-net
 
 # Объявляем сеть
 networks:
-  superselenoid-net:
-    name: superselenoid-net
+  jelenoid-net:
+    name: jelenoid-net
     driver: bridge # Указываем, что сеть создана заранее

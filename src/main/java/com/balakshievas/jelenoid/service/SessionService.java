@@ -1,7 +1,7 @@
-package com.balakshievas.superselenoid.service;
+package com.balakshievas.jelenoid.service;
 
-import com.balakshievas.superselenoid.dto.ContainerInfo;
-import com.balakshievas.superselenoid.dto.SessionInfo;
+import com.balakshievas.jelenoid.dto.ContainerInfo;
+import com.balakshievas.jelenoid.dto.SessionInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;

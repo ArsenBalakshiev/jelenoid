@@ -1,6 +1,6 @@
-package com.balakshievas.superselenoid.service;
+package com.balakshievas.jelenoid.service;
 
-import com.balakshievas.superselenoid.dto.ContainerInfo;
+import com.balakshievas.jelenoid.dto.ContainerInfo;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.model.HostConfig;
@@ -24,16 +24,16 @@ public class ContainerManagerService {
 
     private static final Logger log = LoggerFactory.getLogger(ContainerManagerService.class);
 
-    @Value("${superselenoid.timeouts.session}")
+    @Value("${jelenoid.timeouts.session}")
     private long sessionTimeout;
 
-    @Value("${superselenoid.timeouts.cleanup}")
+    @Value("${jelenoid.timeouts.cleanup}")
     private int containerStopTimeout;
 
     @Autowired
     private DockerClient dockerClient;
 
-    @Value("${superselenoid.docker.network:superselenoid-net}")
+    @Value("${jelenoid.docker.network:jelenoid-net}")
     private String dockerNetworkName;
 
     private final RestClient restClient = RestClient.builder().build();
@@ -44,7 +44,7 @@ public class ContainerManagerService {
         return activeContainers;
     }
 
-    @Scheduled(fixedRateString = "${superselenoid.timeouts.startup}")
+    @Scheduled(fixedRateString = "${jelenoid.timeouts.startup}")
     @Async
     public void checkInactiveContainers() {
         activeContainers.entrySet().removeIf(entry -> {
@@ -57,7 +57,7 @@ public class ContainerManagerService {
     }
 
     public ContainerInfo startContainer(String image) {
-        String containerName = "superselenoid-session" + UUID.randomUUID().toString();
+        String containerName = "jelenoid-session" + UUID.randomUUID().toString();
 
         HostConfig hostConfig = HostConfig.newHostConfig()
                 .withNetworkMode(dockerNetworkName)

@@ -1,4 +1,4 @@
-package com.balakshievas.superselenoid.config;
+package com.balakshievas.jelenoid.config;
 
 import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
 import org.apache.hc.core5.http.ConnectionReuseStrategy;
