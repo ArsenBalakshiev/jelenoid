@@ -6,12 +6,19 @@ spring:
     name: jelenoid
 
 jelenoid:
+  logs:
+    dir: ${LOG_OUTPUT_DIR:/logs}
+  video:
+    dir: ${VIDEO_OUTPUT_DIR:/videos}
+    recorder-image: ${RECORDER_IMAGE:selenoid/video-recorder:latest-release}
+  docker:
+    network: ${DOCKER_NETWORK:jelenoid-net}
   browsers:
     config-dir: ${BROWSERS_FILE:}
   timeouts:
     session: ${SESSION_TIMEOUT:60000}
-    startup: 10000
-    cleanup: 15000
+    startup: ${STARTUP_TIMEOUT:10000}
+    cleanup: ${CLEANUP_TIMEOUT:15000}
 
 management:
   endpoint:

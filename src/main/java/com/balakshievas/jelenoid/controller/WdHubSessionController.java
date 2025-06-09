@@ -15,11 +15,10 @@ import java.util.Map;
 public class WdHubSessionController {
 
     @Autowired
-    private SessionService sessionService; // Новый сервис для управления сессиями
+    private SessionService sessionService;
 
     @PostMapping("")
     public ResponseEntity<Map<String, Object>> createSession(@RequestBody Map<String, Object> requestBody) {
-        // Логика извлечения capabilities и создания сессии
         Map<String, Object> w3cResponse = sessionService.createSession(requestBody);
         return ResponseEntity.ok(w3cResponse);
     }

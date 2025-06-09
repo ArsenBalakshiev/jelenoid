@@ -41,6 +41,11 @@
 
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-websocket</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-devtools</artifactId>
 			<scope>runtime</scope>
 			<optional>true</optional>
@@ -97,7 +102,14 @@
 		<dependency>
 			<groupId>org.seleniumhq.selenium</groupId>
 			<artifactId>selenium-java</artifactId>
-			<version>4.33.0</version> <!-- Используйте актуальную версию -->
+			<version>4.31.0</version> <!-- Используйте актуальную версию -->
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.seleniumhq.selenium</groupId>
+			<artifactId>selenium-devtools-v133</artifactId>
+			<version>4.31.0</version>
 			<scope>test</scope>
 		</dependency>
 
