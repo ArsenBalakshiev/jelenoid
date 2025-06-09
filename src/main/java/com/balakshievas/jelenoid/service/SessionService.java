@@ -1,7 +1,7 @@
 package com.balakshievas.jelenoid.service;
 
 import com.balakshievas.jelenoid.dto.ContainerInfo;
-import com.balakshievas.jelenoid.dto.SessionInfo;
+import com.balakshievas.jelenoid.dto.Session;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,8 +44,17 @@ public class SessionService {
         if (image == null) {
             return createErrorResponse("Requested environment is not available");
         }
+        Map<String, Object> selenoidOptions = findSelenoidOptions(requestBody);
 
-        ContainerInfo containerInfo = containerManagerService.startContainer(image);
+        boolean enableVnc = getBooleanOption(selenoidOptions, "enableVNC");
+        boolean enableVideo = getBooleanOption(selenoidOptions, "enableVideo");
+        boolean enableLog = getBooleanOption(selenoidOptions, "enableLog");
+
+        String videoName = getStringOption(selenoidOptions, "videoName");
+        String logName = getStringOption(selenoidOptions, "logName");
+
+        ContainerInfo containerInfo = containerManagerService.startContainer(image, enableVnc,
+                enableVideo, enableLog, videoName, logName);
 
         try {
             String createSessionUrl = "http://" + containerInfo.getContainerName() + ":4444/session";
@@ -67,8 +76,10 @@ public class SessionService {
             }
 
             String hubSessionId = UUID.randomUUID().toString();
-            activeSessionsService.putSession(hubSessionId, new SessionInfo(containerInfo.getContainerId(), remoteSessionId));
-            log.info("Session created: hubId={} -> remoteId={} in container={}", hubSessionId, remoteSessionId, containerInfo.getContainerId());
+            Session session = new Session(hubSessionId, remoteSessionId, containerInfo);
+            activeSessionsService.putSession(hubSessionId, session);
+            log.info("Session created: hubId={} -> remoteId={} in container={}",
+                    session.hubSessionId(), session.remoteSessionId(), session.containerInfo().getContainerId());
 
             Map<String, Object> containerCapabilities = (Map<String, Object>) responseValue.get("capabilities");
             if (containerCapabilities.containsKey("goog:chromeOptions")) {
@@ -83,9 +94,6 @@ public class SessionService {
             containerCapabilities.put("se:cdp", devToolsUrl);
             log.info("Advertising 'se:cdp' endpoint: {}", devToolsUrl);
 
-            // --- КОНЕЦ ИЗМЕНЕНИЙ ---
-
-            // 3. Подменяем sessionId, как и раньше
             responseValue.put("sessionId", hubSessionId);
 
             return Map.of("value", responseValue);
@@ -98,34 +106,32 @@ public class SessionService {
     }
 
     public void deleteSession(String hubSessionId) {
-        SessionInfo sessionInfo = activeSessionsService.removeSession(hubSessionId);
-        if (sessionInfo != null) {
-            log.info("Deleting session: hubId={} -> stopping container={}", hubSessionId, sessionInfo.getContainerId());
-            containerManagerService.stopContainer(sessionInfo.getContainerId());
+        Session session = activeSessionsService.removeSession(hubSessionId); // Получаем полную сессию
+        if (session != null) {
+            log.info("Deleting session: hubId={} -> stopping container={}", hubSessionId, session.containerInfo().getContainerId());
+            containerManagerService.stopContainer(session.containerInfo().getContainerId());
         }
     }
 
     public ResponseEntity<byte[]> proxyRequest(String hubSessionId, HttpMethod method, String relativePath, HttpHeaders headers, byte[] body) {
-        SessionInfo sessionInfo = activeSessionsService.getSession(hubSessionId);
-        if (sessionInfo == null) {
+        Session session = activeSessionsService.getSession(hubSessionId);
+
+        if (session == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found: " + hubSessionId);
         }
 
-        ContainerInfo containerInfo = containerManagerService.getActiveContainers().get(sessionInfo.getContainerId());
-        if (containerInfo == null) {
-            activeSessionsService.removeSession(hubSessionId);
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Container for session " + hubSessionId + " is no longer active.");
-        }
-        containerInfo.updateActivity();
+        session.updateActivity();
 
-        String pathForContainer = relativePath.replace(hubSessionId, sessionInfo.getRemoteSessionId());
+        ContainerInfo containerInfo = session.containerInfo();
+        String remoteSessionId = session.remoteSessionId();
+
+        String pathForContainer = relativePath.replace(hubSessionId, remoteSessionId);
 
         URI targetUri = UriComponentsBuilder
                 .fromUriString("http://" + containerInfo.getContainerName() + ":4444")
                 .path(pathForContainer)
                 .build(true)
                 .toUri();
-
 
         log.debug("Proxying: {} {} -> {}", method, relativePath, targetUri);
 
@@ -164,5 +170,39 @@ public class SessionService {
     private Map<String, Object> createErrorResponse(String message) {
         Map<String, Object> errorValue = Map.of("message", message, "error", "session not created");
         return Map.of("status", 13, "value", errorValue);
+    }
+
+    private Map<String, Object> findSelenoidOptions(Map<String, Object> requestBody) {
+        try {
+            Map<String, Object> capabilities = (Map<String, Object>) requestBody.get("capabilities");
+            if (capabilities == null) return Collections.emptyMap();
+
+            Map<String, Object> alwaysMatch = (Map<String, Object>) capabilities.get("alwaysMatch");
+            if (alwaysMatch != null && alwaysMatch.get("selenoid:options") instanceof Map) {
+                return (Map<String, Object>) alwaysMatch.get("selenoid:options");
+            }
+
+            List<Map<String, Object>> firstMatchList = (List<Map<String, Object>>) capabilities.get("firstMatch");
+            if (firstMatchList != null) {
+                for (Map<String, Object> match : firstMatchList) {
+                    if (match != null && match.get("selenoid:options") instanceof Map) {
+                        return (Map<String, Object>) match.get("selenoid:options");
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not parse 'selenoid:options' from capabilities.", e);
+        }
+        return Collections.emptyMap();
+    }
+
+    private boolean getBooleanOption(Map<String, Object> options, String key) {
+        Object value = options.get(key);
+        return Boolean.TRUE.equals(value);
+    }
+
+    private String getStringOption(Map<String, Object> options, String key) {
+        Object value = options.get(key);
+        return value instanceof String ? (String) value : null;
     }
 }

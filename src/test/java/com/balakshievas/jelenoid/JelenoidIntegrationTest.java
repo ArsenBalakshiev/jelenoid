@@ -61,8 +61,6 @@ class JelenoidIntegrationTest {
         URL hubUrl = new URL("http://localhost:8080/wd/hub");
         ChromeOptions chromeOptions = new ChromeOptions();
         chromeOptions.addArguments("--remote-allow-origins=*");
-/*        chromeOptions.setCapability("browserName", "chrome");
-        chromeOptions.setCapability("browserVersion", "133");*/
         chromeOptions.addArguments("--no-sandbox");
 
         DesiredCapabilities capabilities = new DesiredCapabilities();
@@ -72,13 +70,9 @@ class JelenoidIntegrationTest {
 
         WebDriver driver = null;
         try {
-            // --- ИЗМЕНЕНИЕ: Создаем сначала RemoteWebDriver, а затем "обогащаем" его ---
-            // 1. Создаем базовый RemoteWebDriver
             RemoteWebDriver remoteDriver = new RemoteWebDriver(hubUrl, chromeOptions);
 
-            // 2. Используем Augmenter для добавления специфичных возможностей
             driver = new Augmenter().augment(remoteDriver);
-            // --- КОНЕЦ ИЗМЕНЕНИЙ ---
 
             driver.manage().window().maximize();
 
@@ -103,11 +97,9 @@ class JelenoidIntegrationTest {
             WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
             driver.get("http://webdriveruniversity.com/Contact-Us/contactus.html");
 
-            // ... остальная часть вашего теста без изменений ...
             WebElement firstNameField = wait.until(ExpectedConditions.visibilityOfElementLocated(By.name("first_name")));
             firstNameField.sendKeys("John");
 
-            // Проверка скриншотов также будет работать благодаря Augmenter
             if (driver instanceof TakesScreenshot) {
                 byte[] screenshotBytes = ((TakesScreenshot) driver).getScreenshotAs(OutputType.BYTES);
                 assertTrue(screenshotBytes.length > 0);
@@ -127,18 +119,15 @@ class JelenoidIntegrationTest {
         ChromeOptions options = new ChromeOptions();
         options.addArguments("--remote-allow-origins=*");
         options.addArguments("--no-sandbox");
-
+        options.addArguments("--window-size=1920,1080");
+        options.addArguments("--disable-dev-shm-usage");
+        options.addArguments("--disable-gpu");
         DesiredCapabilities capabilities = new DesiredCapabilities();
         capabilities.setBrowserName("chrome");
-        capabilities.setVersion("133"); // Убедитесь, что версия верна
+        capabilities.setVersion("133");
         capabilities.setCapability(ChromeOptions.CAPABILITY, options);
         Map<String, Object> selenoidOptions = new HashMap<>();
         selenoidOptions.put("enableVNC", true);
-
-        // --- ГЛАВНОЕ ИЗМЕНЕНИЕ ---
-        // Добавляем флаг для включения VNC
-        //capabilities.setCapability("enableVNC", true);
-        // --- КОНЕЦ ИЗМЕНЕНИЯ ---
 
         capabilities.setCapability("selenoid:options", selenoidOptions);
 
@@ -146,10 +135,9 @@ class JelenoidIntegrationTest {
         try {
             driver = new RemoteWebDriver(hubUrl, capabilities);
 
-            // Поставьте здесь точку останова, чтобы проверить подключение через noVNC
             driver.get("https://google.com");
             System.out.println("VNC сессия активна. ID: " + ((RemoteWebDriver) driver).getSessionId());
-            Thread.sleep(30000); // Держим сессию открытой 30 секунд для проверки
+            Thread.sleep(30000);
 
         } catch (InterruptedException e) {
             // ...

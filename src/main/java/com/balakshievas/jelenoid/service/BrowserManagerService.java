@@ -40,13 +40,10 @@ public class BrowserManagerService {
         String configPath = browserProperties.getConfigDir();
         String resourcePath;
 
-        // Если путь не указан в конфигурации, используем путь по умолчанию из classpath
         if (configPath == null || configPath.isBlank()) {
             resourcePath = "classpath:browsers.json";
             log.info("Свойство 'jelenoid.browsers.config-dir' не установлено. Используется файл по умолчанию: {}", resourcePath);
         } else {
-            // Если путь указан, формируем его с префиксом 'file:' для загрузки из файловой системы.
-            // Заменяем обратные слэши для совместимости с Windows.
             resourcePath = "file:" + configPath.replace("\\", "/") + "/browsers.json";
             log.info("Загрузка конфигурации браузеров из указанной директории: {}", resourcePath);
         }
@@ -62,7 +59,6 @@ public class BrowserManagerService {
             TypeReference<Map<String, Map<String, Object>>> typeRef = new TypeReference<>() {};
             Map<String, Map<String, Object>> browsersData = objectMapper.readValue(inputStream, typeRef);
 
-            // ... остальная логика метода остается без изменений
             for (Map.Entry<String, Map<String, Object>> browserEntry : browsersData.entrySet()) {
                 String browserName = browserEntry.getKey();
                 Map<String, Object> browserDetails = browserEntry.getValue();

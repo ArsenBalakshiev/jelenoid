@@ -4,31 +4,22 @@ import com.balakshievas.jelenoid.dto.ContainerInfo;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.model.HostConfig;
-import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
-import org.springframework.scheduling.annotation.Async;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class ContainerManagerService {
 
     private static final Logger log = LoggerFactory.getLogger(ContainerManagerService.class);
-
-    @Value("${jelenoid.timeouts.session}")
-    private long sessionTimeout;
-
-    @Value("${jelenoid.timeouts.cleanup}")
-    private int containerStopTimeout;
 
     @Autowired
     private DockerClient dockerClient;
@@ -36,54 +27,60 @@ public class ContainerManagerService {
     @Value("${jelenoid.docker.network:jelenoid-net}")
     private String dockerNetworkName;
 
+    @Value("${jelenoid.timeouts.session}")
+    private long sessionTimeout;
+
+    @Value("${jelenoid.timeouts.cleanup}")
+    private int containerStopTimeout;
+
+    @Value("${jelenoid.video.dir}")
+    private String videoOutputDir;
+
+    @Value("${jelenoid.logs.dir}")
+    private String logOutputDir;
+
+    @Value("${jelenoid.video.recorder-image}")
+    private String videoRecorderImage;
+
     private final RestClient restClient = RestClient.builder().build();
 
-    private static final Map<String, ContainerInfo> activeContainers = new ConcurrentHashMap<>();
+    public ContainerInfo startContainer(String image, boolean isVncEnabled, boolean isVideoEnabled,
+                                        boolean isLogEnabled, String videoName, String logName) {
 
-    public Map<String, ContainerInfo> getActiveContainers() {
-        return activeContainers;
-    }
+        String hubSessionId = UUID.randomUUID().toString();
 
-    @Scheduled(fixedRateString = "${jelenoid.timeouts.startup}")
-    @Async
-    public void checkInactiveContainers() {
-        activeContainers.entrySet().removeIf(entry -> {
-            if (System.currentTimeMillis() - entry.getValue().getLastActivity() > sessionTimeout) {
-                stopContainer(entry.getKey());
-                return true;
-            }
-            return false;
-        });
-    }
-
-    public ContainerInfo startContainer(String image) {
-        String containerName = "jelenoid-session" + UUID.randomUUID().toString();
+        String containerName = "jelenoid-session" + hubSessionId;
 
         HostConfig hostConfig = HostConfig.newHostConfig()
                 .withNetworkMode(dockerNetworkName)
                 .withShmSize(2_147_483_648L);
 
+        List<String> envVars = new ArrayList<>();
+        if (isVncEnabled) {
+            envVars.add("ENABLE_VNC=true");
+        }
+
         CreateContainerResponse container = dockerClient.createContainerCmd(image)
                 .withName(containerName)
                 .withHostConfig(hostConfig)
+                .withEnv(envVars)
                 .exec();
 
-        dockerClient.startContainerCmd(container.getId()).exec();
+        String containerId = container.getId();
+        dockerClient.startContainerCmd(containerId).exec();
+
         log.info("Started container {} with name {}", container.getId(), containerName);
 
         waitForContainerToBeReady(containerName);
 
-        ContainerInfo info = new ContainerInfo(container.getId(), containerName);
-        activeContainers.put(container.getId(), info);
-
-        return info;
+        return new ContainerInfo(containerId, containerName);
     }
 
-    private void waitForContainerToBeReady(String containerName) {
-        String statusUrl = "http://" + containerName + ":4444/status";
+    private void waitForContainerToBeReady(String containerIpAddress) {
+        String statusUrl = "http://" + containerIpAddress + ":4444/status";
         long timeout = System.currentTimeMillis() + sessionTimeout;
 
-        log.info("Waiting for container {} to be ready at {}...", containerName, statusUrl);
+        log.info("Waiting for container {} to be ready at {}...", containerIpAddress, statusUrl);
 
         while (System.currentTimeMillis() < timeout) {
             try {
@@ -93,12 +90,13 @@ public class ContainerManagerService {
                         .toEntity(String.class);
 
                 if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null && response.getBody().contains("\"ready\":true")) {
-                    log.info("Container {} is ready.", containerName);
+                    log.info("Container {} reported ready. Adding a tactical delay of 200ms.", containerIpAddress);
+                    Thread.sleep(500);
                     return;
                 }
             } catch (Exception e) {
                 try {
-                    Thread.sleep(500); // Небольшая пауза перед следующей попыткой
+                    Thread.sleep(1000); // Небольшая пауза перед следующей попыткой
                 } catch (InterruptedException interruptedException) {
                     Thread.currentThread().interrupt();
                     throw new IllegalStateException("Health check was interrupted", interruptedException);
@@ -106,29 +104,17 @@ public class ContainerManagerService {
             }
         }
 
-        throw new IllegalStateException("Container " + containerName + " did not become ready in time.");
+        throw new IllegalStateException("Container " + containerIpAddress + " did not become ready in time.");
     }
 
     public void stopContainer(String containerId) {
         try {
-            dockerClient.stopContainerCmd(containerId)
-                    .withTimeout(containerStopTimeout)
-                    .exec();
-        } finally {
+            log.info("Stopping and removing container {}", containerId);
+            dockerClient.stopContainerCmd(containerId).withTimeout(containerStopTimeout).exec();
             dockerClient.removeContainerCmd(containerId).exec();
-            activeContainers.remove(containerId);
+        } catch (Exception e) {
+            log.error("Failed to stop/remove container {}", containerId, e);
         }
-    }
-
-    @PreDestroy
-    public void cleanup() {
-        activeContainers.keySet().parallelStream().forEach(id -> {
-            try {
-                stopContainer(id);
-            } catch (Exception e) {
-                log.error("Error stopping container {}", id, e);
-            }
-        });
     }
 
 }

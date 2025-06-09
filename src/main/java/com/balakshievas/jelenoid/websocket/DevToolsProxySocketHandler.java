@@ -29,7 +29,6 @@ public class DevToolsProxySocketHandler extends TextWebSocketHandler {
 
         WebSocketClient client = new StandardWebSocketClient();
 
-        // Этот обработчик будет пересылать текстовые сообщения ОТ контейнера К клиенту
         TextWebSocketHandler forwardToClientHandler = new TextWebSocketHandler() {
             @Override
             protected void handleTextMessage(WebSocketSession session, TextMessage message) throws IOException {
