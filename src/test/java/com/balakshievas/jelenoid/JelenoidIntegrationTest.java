@@ -30,7 +30,7 @@ class JelenoidIntegrationTest {
     @DisplayName("Полный цикл: создание сессии, проксирование команды и удаление сессии")
     void shouldCreateSessionAndProxyCommands() throws MalformedURLException {
 
-        URL hubUrl = new URL("http://localhost:8080/wd/hub");
+        URL hubUrl = new URL("http://localhost:4444/wd/hub");
 
         ChromeOptions chromeOptions = new ChromeOptions();
         chromeOptions.setCapability("browserName", "chrome");
@@ -58,7 +58,7 @@ class JelenoidIntegrationTest {
     @Test
     @DisplayName("Комплексное взаимодействие с формой, скриншотами и DevTools")
     void shouldPerformComplexPageInteractions() throws MalformedURLException {
-        URL hubUrl = new URL("http://localhost:8080/wd/hub");
+        URL hubUrl = new URL("http://localhost:4444/wd/hub");
         ChromeOptions chromeOptions = new ChromeOptions();
         chromeOptions.addArguments("--remote-allow-origins=*");
         chromeOptions.addArguments("--no-sandbox");
@@ -114,7 +114,7 @@ class JelenoidIntegrationTest {
 
     @Test
     void myVncTest() throws MalformedURLException {
-        URL hubUrl = new URL("http://localhost:8080/wd/hub");
+        URL hubUrl = new URL("http://localhost:4444/wd/hub");
 
         ChromeOptions options = new ChromeOptions();
         options.addArguments("--remote-allow-origins=*");

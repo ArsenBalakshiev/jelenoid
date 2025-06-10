@@ -1,11 +1,15 @@
 server:
-  port: ${JELENOID_PORT:8080}
+  port: ${JELENOID_PORT:4444}
 
 spring:
   application:
     name: jelenoid
 
 jelenoid:
+  limit: ${PARALLEL_SESSIONS:5}
+  queue:
+    limit: ${QUEUE_LIMIT:5}
+    timeout: ${QUEUE_TIMEOUT:300}
   logs:
     dir: ${LOG_OUTPUT_DIR:/logs}
   video:
@@ -16,8 +20,8 @@ jelenoid:
   browsers:
     config-dir: ${BROWSERS_FILE:}
   timeouts:
-    session: ${SESSION_TIMEOUT:60000}
-    startup: ${STARTUP_TIMEOUT:10000}
+    session: ${SESSION_TIMEOUT:600000}
+    startup: ${STARTUP_TIMEOUT:30000}
     cleanup: ${CLEANUP_TIMEOUT:15000}
 
 management:

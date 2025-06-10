@@ -1,6 +1,7 @@
 package com.balakshievas.jelenoid.service;
 
 import com.balakshievas.jelenoid.dto.ContainerInfo;
+import com.balakshievas.jelenoid.dto.PendingRequest;
 import com.balakshievas.jelenoid.dto.Session;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +16,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 @Service
 public class SessionService {
@@ -36,10 +38,34 @@ public class SessionService {
     @Value("${server.address:localhost}")
     private String serverAddress;
 
-    @Value("${server.port:8080}")
+    @Value("${jelenoid.limit}")
+    private int sessionLimit;
+
+    @Value("${server.port:4444}")
     private int serverPort;
 
-    public Map<String, Object> createSession(Map<String, Object> requestBody) {
+    public CompletableFuture<Map<String, Object>> createSessionOrQueue(Map<String, Object> requestBody) {
+        if (activeSessionsService.getActiveSessionsCount() < sessionLimit) {
+            log.info("Slot available. Creating session immediately. Active sessions: {}", activeSessionsService.getActiveSessionsCount());
+            return CompletableFuture.supplyAsync(() -> createSessionInternal(requestBody));
+        } else {
+            CompletableFuture<Map<String, Object>> future = new CompletableFuture<>();
+            PendingRequest pendingRequest = new PendingRequest(requestBody, future);
+
+            boolean addedToQueue = activeSessionsService.offerToQueue(pendingRequest);
+            if (addedToQueue) {
+                log.info("No free slots. Request was added to the queue. Active sessions: {}", activeSessionsService.getActiveSessionsCount());
+                return future;
+            } else {
+                log.warn("Queue is full. Rejecting request. Active sessions: {}", activeSessionsService.getActiveSessionsCount());
+                return CompletableFuture.failedFuture(
+                        new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Session queue is full")
+                );
+            }
+        }
+    }
+
+    public Map<String, Object> createSessionInternal(Map<String, Object> requestBody) {
         String image = findImageForRequest(requestBody);
         if (image == null) {
             return createErrorResponse("Requested environment is not available");
@@ -55,6 +81,7 @@ public class SessionService {
 
         ContainerInfo containerInfo = containerManagerService.startContainer(image, enableVnc,
                 enableVideo, enableLog, videoName, logName);
+        ;
 
         try {
             String createSessionUrl = "http://" + containerInfo.getContainerName() + ":4444/session";
@@ -110,6 +137,26 @@ public class SessionService {
         if (session != null) {
             log.info("Deleting session: hubId={} -> stopping container={}", hubSessionId, session.containerInfo().getContainerId());
             containerManagerService.stopContainer(session.containerInfo().getContainerId());
+            processQueue();
+        }
+    }
+
+    public void processQueue() {
+        while (activeSessionsService.getActiveSessionsCount() < sessionLimit) {
+            PendingRequest nextRequest = activeSessionsService.pollFromQueue();
+            if (nextRequest != null) {
+                log.info("A slot has been freed. Processing next request from queue.");
+
+                CompletableFuture.supplyAsync(() -> createSessionInternal(nextRequest.getRequestBody()))
+                        .thenAccept(result -> nextRequest.getFuture().complete(result))
+                        .exceptionally(ex -> {
+                            nextRequest.getFuture().completeExceptionally(ex);
+                            return null;
+                        });
+
+            } else {
+                break;
+            }
         }
     }
 
