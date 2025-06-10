@@ -1,77 +1,132 @@
 package com.balakshievas.jelenoid;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.RepeatedTest;
-import org.junit.jupiter.api.RepetitionInfo;
+import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
-import org.openqa.selenium.remote.DesiredCapabilities;
 import org.openqa.selenium.remote.RemoteWebDriver;
 
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Execution(ExecutionMode.CONCURRENT)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class JelenoidLoadTest {
 
-    private ThreadLocal<WebDriver> driver = new ThreadLocal<>();
+    private final int PARALLEL_TESTS = 20;
+    private final URL HUB_URL;
 
-    @BeforeEach
-    public void setUp() throws MalformedURLException {
-        System.out.printf("Thread %s: Starting new session...%n", Thread.currentThread().getName());
+    // Потокобезопасная коллекция для сбора метрик
+    private final ConcurrentLinkedQueue<Long> sessionCreationTimes = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<String> failedTests = new ConcurrentLinkedQueue<>();
 
-        URL hubUrl = new URL("http://localhost:4444/wd/hub");
-
-        ChromeOptions options = new ChromeOptions();
-        options.addArguments("--no-sandbox");
-        options.addArguments("--disable-dev-shm-usage");
-        options.addArguments("--headless");
-
-        DesiredCapabilities capabilities = new DesiredCapabilities();
-        capabilities.setBrowserName("chrome");
-        capabilities.setVersion("133"); // Убедитесь, что версия верна
-        capabilities.setCapability(ChromeOptions.CAPABILITY, options);
-
-        RemoteWebDriver remoteDriver = new RemoteWebDriver(hubUrl, capabilities);
-        driver.set(remoteDriver);
-        System.out.printf("Thread %s: Session %s created.%n", Thread.currentThread().getName(), remoteDriver.getSessionId());
+    public JelenoidLoadTest() throws MalformedURLException {
+        this.HUB_URL = new URL("http://localhost:4444/wd/hub");
     }
 
-    @RepeatedTest(25)
-    public void loadTest(RepetitionInfo repetitionInfo) {
-        String threadName = Thread.currentThread().getName();
-        WebDriver currentDriver = driver.get();
+    @BeforeAll
+    public void beforeAll() {
+        sessionCreationTimes.clear();
+        failedTests.clear();
+        System.out.printf("Starting load test with %d parallel sessions...%n", PARALLEL_TESTS);
+    }
 
-        System.out.printf("Thread %s: Executing test repetition %d of %d...%n",
-                threadName, repetitionInfo.getCurrentRepetition(), repetitionInfo.getTotalRepetitions());
-
-        currentDriver.get("https://www.google.com");
-        assertEquals("Google", currentDriver.getTitle());
+    @Test
+    @DisplayName("Jelenoid Concurrent Session Creation Test")
+    public void runConcurrentLoadTest() {
+        // Используем ForkJoinPool для создания настоящей параллельной нагрузки
+        ForkJoinPool customThreadPool = new ForkJoinPool(PARALLEL_TESTS);
 
         try {
-            Thread.sleep(20000);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            customThreadPool.submit(() ->
+                    IntStream.range(0, PARALLEL_TESTS).parallel().forEach(this::runSingleTest)
+            ).get(5, TimeUnit.MINUTES); // Общий таймаут на все тесты
+        } catch (Exception e) {
+            Assertions.fail("Load test failed with exception", e);
+        } finally {
+            customThreadPool.shutdown();
         }
 
-        System.out.printf("Thread %s: Test repetition %d finished.%n",
-                threadName, repetitionInfo.getCurrentRepetition());
+        assertTrue(failedTests.isEmpty(), "Some tests failed: " + String.join(", ", failedTests));
     }
 
-    @AfterEach
-    public void tearDown() {
+    @AfterAll
+    public void afterAll() {
+        System.out.println("\n==================== LOAD TEST REPORT ====================");
+        System.out.printf("Total tests executed: %d%n", PARALLEL_TESTS);
+        System.out.printf("Successful sessions created: %d%n", sessionCreationTimes.size());
+        System.out.printf("Failed tests: %d%n", failedTests.size());
+
+        if (!sessionCreationTimes.isEmpty()) {
+            printStats("Session Creation Time (ms)", new ArrayList<>(sessionCreationTimes));
+        }
+        System.out.println("==========================================================");
+    }
+
+    private void runSingleTest(int testNumber) {
         String threadName = Thread.currentThread().getName();
-        WebDriver currentDriver = driver.get();
-        if (currentDriver != null) {
-            System.out.printf("Thread %s: Closing session %s...%n",
-                    threadName, ((RemoteWebDriver) currentDriver).getSessionId());
-            currentDriver.quit();
+        System.out.printf("[%s] Test #%d: Starting...%n", threadName, testNumber);
+        WebDriver driver = null;
+        try {
+            // --- Сбор метрики времени создания сессии ---
+            Instant start = Instant.now();
+
+            ChromeOptions options = new ChromeOptions();
+            options.addArguments("--no-sandbox", "--disable-dev-shm-usage", "--headless");
+            // Установка таймаута на стороне клиента, чтобы он не ждал вечно
+            options.setPageLoadTimeout(Duration.ofSeconds(60));
+
+            driver = new RemoteWebDriver(HUB_URL, options);
+
+            Instant end = Instant.now();
+            long timeElapsed = Duration.between(start, end).toMillis();
+            sessionCreationTimes.add(timeElapsed);
+            System.out.printf("[%s] Test #%d: Session created in %d ms. Session ID: %s%n",
+                    threadName, testNumber, timeElapsed, ((RemoteWebDriver) driver).getSessionId());
+
+            // --- Более реалистичные действия ---
+            driver.get("https://www.google.com");
+            assertEquals("Google", driver.getTitle());
+
+            // Имитация работы пользователя
+            Thread.sleep(Duration.ofMillis(1000 + (long) (Math.random() * 2000)).toMillis());
+
+            System.out.printf("[%s] Test #%d: Finished successfully.%n", threadName, testNumber);
+
+        } catch (Exception e) {
+            System.err.printf("[%s] Test #%d: FAILED! Reason: %s%n", threadName, testNumber, e.getMessage());
+            failedTests.add(String.format("Test #%d failed: %s", testNumber, e.getClass().getSimpleName()));
+        } finally {
+            if (driver != null) {
+                driver.quit();
+            }
         }
     }
 
+    private void printStats(String name, List<Long> times) {
+        Collections.sort(times);
+        long min = times.get(0);
+        long max = times.get(times.size() - 1);
+        double avg = times.stream().mapToLong(Long::longValue).average().orElse(0.0);
+        long p95 = times.get((int) (times.size() * 0.95));
+
+        System.out.printf("%nMetrics for '%s':%n", name);
+        System.out.printf("  -> Average: %.2f ms%n", avg);
+        System.out.printf("  -> Min: %d ms%n", min);
+        System.out.printf("  -> Max: %d ms%n", max);
+        System.out.printf("  -> 95th Percentile: %d ms%n", p95);
+    }
 }

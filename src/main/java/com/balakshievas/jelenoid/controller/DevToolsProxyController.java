@@ -45,7 +45,7 @@ public class DevToolsProxyController {
     public void proxyDevTools(@PathVariable String sessionId, HttpServletRequest request, HttpServletResponse response)
             throws Exception {
 
-        Session session = activeSessionsService.getSession(sessionId);
+        Session session = activeSessionsService.get(sessionId);
         if (session == null) {
             response.sendError(HttpStatus.NOT_FOUND.value(), "Session not found");
             return;

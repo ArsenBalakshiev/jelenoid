@@ -26,20 +26,9 @@ public class WdHubSessionController {
     @Value("${jelenoid.queue.timeout}") // Таймаут из конфига
     private long queueTimeoutSeconds;
 
-    @PostMapping("/session") // Эндпоинт для создания сессии
-    public Map<String, Object> createSession(@RequestBody Map<String, Object> requestBody) {
-        CompletableFuture<Map<String, Object>> sessionFuture = sessionService.createSessionOrQueue(requestBody);
-        try {
-            return sessionFuture.get(queueTimeoutSeconds, TimeUnit.SECONDS);
-        } catch (TimeoutException e) {
-            throw new ResponseStatusException(HttpStatus.GATEWAY_TIMEOUT, "Request timed out in session queue.");
-        } catch (Exception e) {
-            // Обработка других ошибок, например, если очередь полна
-            if (e.getCause() instanceof ResponseStatusException rse) {
-                throw rse;
-            }
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to create session", e);
-        }
+    @PostMapping("/session")
+    public CompletableFuture<Map<String, Object>> createSession(@RequestBody Map<String, Object> requestBody) {
+        return sessionService.createSessionOrQueue(requestBody);
     }
 
     @DeleteMapping("/session/{sessionId}")

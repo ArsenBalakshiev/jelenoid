@@ -1,13 +1,16 @@
 package com.balakshievas.jelenoid.service;
 
+import com.balakshievas.jelenoid.config.TaskExecutorConfig;
 import com.balakshievas.jelenoid.dto.ContainerInfo;
 import com.balakshievas.jelenoid.dto.PendingRequest;
 import com.balakshievas.jelenoid.dto.Session;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -17,59 +20,60 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.net.URI;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class SessionService {
 
     private static final Logger log = LoggerFactory.getLogger(SessionService.class);
 
-    @Autowired
-    private BrowserManagerService browserManagerService;
-
-    @Autowired
-    private ContainerManagerService containerManagerService;
-
-    @Autowired
-    private RestClient restClient;
-
-    @Autowired
-    private ActiveSessionsService activeSessionsService;
-
-    @Value("${server.address:localhost}")
-    private String serverAddress;
-
     @Value("${jelenoid.limit}")
     private int sessionLimit;
-
+    @Value("${jelenoid.queue.timeout}")
+    private long queueTimeoutSeconds;
+    @Value("${server.address:localhost}")
+    private String serverAddress;
     @Value("${server.port:4444}")
     private int serverPort;
 
+    @Autowired private BrowserManagerService browserManagerService;
+    @Autowired private ActiveSessionsService activeSessionsService;
+    @Autowired private ContainerManagerService containerManagerService;
+    @Autowired private RestClient restClient;
+    @Autowired private ObjectMapper objectMapper;
+    @Autowired @Qualifier(TaskExecutorConfig.SESSION_TASK_EXECUTOR) private Executor taskExecutor;
+
     public CompletableFuture<Map<String, Object>> createSessionOrQueue(Map<String, Object> requestBody) {
-        if (activeSessionsService.getActiveSessionsCount() < sessionLimit) {
-            log.info("Slot available. Creating session immediately. Active sessions: {}", activeSessionsService.getActiveSessionsCount());
-            return CompletableFuture.supplyAsync(() -> createSessionInternal(requestBody));
+        if (activeSessionsService.tryReserveSlot()) {
+            return CompletableFuture.supplyAsync(() -> createSessionInternal(requestBody), taskExecutor)
+                    .whenComplete((result, ex) -> {
+                        if (ex != null) {
+                            log.error("Session creation failed, releasing previously reserved slot.");
+                            activeSessionsService.releaseSlot();
+                            processQueue();
+                        }
+                    });
         } else {
+            log.info("No free slots. Adding request to queue. In-progress: {}/{}, Queue: {}",
+                    activeSessionsService.getInProgressCount(), sessionLimit, activeSessionsService.getQueueSize());
+
             CompletableFuture<Map<String, Object>> future = new CompletableFuture<>();
             PendingRequest pendingRequest = new PendingRequest(requestBody, future);
+            future.orTimeout(queueTimeoutSeconds, TimeUnit.SECONDS);
 
-            boolean addedToQueue = activeSessionsService.offerToQueue(pendingRequest);
-            if (addedToQueue) {
-                log.info("No free slots. Request was added to the queue. Active sessions: {}", activeSessionsService.getActiveSessionsCount());
+            if (activeSessionsService.offerToQueue(pendingRequest)) {
                 return future;
             } else {
-                log.warn("Queue is full. Rejecting request. Active sessions: {}", activeSessionsService.getActiveSessionsCount());
-                return CompletableFuture.failedFuture(
-                        new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Session queue is full")
-                );
+                log.warn("Queue is full. Rejecting request.");
+                return CompletableFuture.failedFuture(new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Session queue is full"));
             }
         }
     }
 
-    public Map<String, Object> createSessionInternal(Map<String, Object> requestBody) {
+    private Map<String, Object> createSessionInternal(Map<String, Object> requestBody) {
         String image = findImageForRequest(requestBody);
-        if (image == null) {
-            return createErrorResponse("Requested environment is not available");
-        }
+
         Map<String, Object> selenoidOptions = findSelenoidOptions(requestBody);
 
         boolean enableVnc = getBooleanOption(selenoidOptions, "enableVNC");
@@ -79,23 +83,21 @@ public class SessionService {
         String videoName = getStringOption(selenoidOptions, "videoName");
         String logName = getStringOption(selenoidOptions, "logName");
 
-        ContainerInfo containerInfo = containerManagerService.startContainer(image, enableVnc,
-                enableVideo, enableLog, videoName, logName);
-        ;
-
+        ContainerInfo containerInfo = null;
         try {
-            String createSessionUrl = "http://" + containerInfo.getContainerName() + ":4444/session";
-            log.info("Proxying session creation to URL: {}", createSessionUrl);
+            containerInfo = containerManagerService.startContainer(image, enableVnc, enableVideo, enableLog,
+                    videoName, logName);
 
-            ResponseEntity<Map<String, Object>> responseFromContainer = restClient.post()
+            String createSessionUrl = "http://" + containerInfo.getContainerName() + ":4444/session";
+            ResponseEntity<String> response = restClient.post()
                     .uri(createSessionUrl)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(requestBody)
                     .retrieve()
-                    .toEntity(new ParameterizedTypeReference<>() {
-                    });
+                    .toEntity(String.class);
 
-            Map<String, Object> responseValue = (Map<String, Object>) responseFromContainer.getBody().get("value");
+            Map<String, Object> responseBody = objectMapper.readValue(response.getBody(), new TypeReference<>() {});
+            Map<String, Object> responseValue = (Map<String, Object>) responseBody.get("value");
             String remoteSessionId = (String) responseValue.get("sessionId");
 
             if (remoteSessionId == null) {
@@ -104,9 +106,7 @@ public class SessionService {
 
             String hubSessionId = UUID.randomUUID().toString();
             Session session = new Session(hubSessionId, remoteSessionId, containerInfo);
-            activeSessionsService.putSession(hubSessionId, session);
-            log.info("Session created: hubId={} -> remoteId={} in container={}",
-                    session.hubSessionId(), session.remoteSessionId(), session.containerInfo().getContainerId());
+            activeSessionsService.sessionSuccessfullyCreated(hubSessionId, session);
 
             Map<String, Object> containerCapabilities = (Map<String, Object>) responseValue.get("capabilities");
             if (containerCapabilities.containsKey("goog:chromeOptions")) {
@@ -122,46 +122,49 @@ public class SessionService {
             log.info("Advertising 'se:cdp' endpoint: {}", devToolsUrl);
 
             responseValue.put("sessionId", hubSessionId);
-
             return Map.of("value", responseValue);
 
         } catch (Exception e) {
-            log.error("Failed to create session in container, stopping container...", e);
-            containerManagerService.stopContainer(containerInfo.getContainerId());
-            throw new RuntimeException("Failed to create session in container", e);
+            if (containerInfo != null) {
+                containerManagerService.stopContainer(containerInfo.getContainerId());
+            }
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to create session in container", e);
         }
     }
 
     public void deleteSession(String hubSessionId) {
-        Session session = activeSessionsService.removeSession(hubSessionId); // Получаем полную сессию
+        Session session = activeSessionsService.sessionDeleted(hubSessionId);
         if (session != null) {
-            log.info("Deleting session: hubId={} -> stopping container={}", hubSessionId, session.containerInfo().getContainerId());
             containerManagerService.stopContainer(session.containerInfo().getContainerId());
             processQueue();
         }
     }
 
     public void processQueue() {
-        while (activeSessionsService.getActiveSessionsCount() < sessionLimit) {
-            PendingRequest nextRequest = activeSessionsService.pollFromQueue();
-            if (nextRequest != null) {
-                log.info("A slot has been freed. Processing next request from queue.");
-
-                CompletableFuture.supplyAsync(() -> createSessionInternal(nextRequest.getRequestBody()))
-                        .thenAccept(result -> nextRequest.getFuture().complete(result))
-                        .exceptionally(ex -> {
-                            nextRequest.getFuture().completeExceptionally(ex);
-                            return null;
-                        });
-
-            } else {
-                break;
+        if (activeSessionsService.getQueueSize() > 0) {
+            if (activeSessionsService.tryReserveSlot()) {
+                PendingRequest nextRequest = activeSessionsService.pollFromQueue();
+                if (nextRequest != null) {
+                    log.info("Processing next request from queue...");
+                    CompletableFuture.supplyAsync(() -> createSessionInternal(nextRequest.getRequestBody()), taskExecutor)
+                            .whenComplete((result, ex) -> {
+                                if (ex != null) {
+                                    activeSessionsService.releaseSlot();
+                                    nextRequest.getFuture().completeExceptionally(ex);
+                                    processQueue();
+                                } else {
+                                    nextRequest.getFuture().complete(result);
+                                }
+                            });
+                } else {
+                    activeSessionsService.releaseSlot();
+                }
             }
         }
     }
 
     public ResponseEntity<byte[]> proxyRequest(String hubSessionId, HttpMethod method, String relativePath, HttpHeaders headers, byte[] body) {
-        Session session = activeSessionsService.getSession(hubSessionId);
+        Session session = activeSessionsService.get(hubSessionId);
 
         if (session == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found: " + hubSessionId);
@@ -179,8 +182,6 @@ public class SessionService {
                 .path(pathForContainer)
                 .build(true)
                 .toUri();
-
-        log.debug("Proxying: {} {} -> {}", method, relativePath, targetUri);
 
         RestClient.RequestBodySpec requestSpec = restClient
                 .method(method)
@@ -212,11 +213,6 @@ public class SessionService {
             }
         }
         return null;
-    }
-
-    private Map<String, Object> createErrorResponse(String message) {
-        Map<String, Object> errorValue = Map.of("message", message, "error", "session not created");
-        return Map.of("status", 13, "value", errorValue);
     }
 
     private Map<String, Object> findSelenoidOptions(Map<String, Object> requestBody) {
@@ -252,4 +248,5 @@ public class SessionService {
         Object value = options.get(key);
         return value instanceof String ? (String) value : null;
     }
+
 }

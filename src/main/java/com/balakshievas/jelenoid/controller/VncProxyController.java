@@ -40,7 +40,7 @@ public class VncProxyController {
         ServerHttpRequest httpRequest = new ServletServerHttpRequest(request);
         ServerHttpResponse httpResponse = new ServletServerHttpResponse(response);
 
-        Session session = activeSessionsService.getSession(sessionId);
+        Session session = activeSessionsService.get(sessionId);
 
         if (session == null) {
             log.error("VNC: Session {} not found.", sessionId);
