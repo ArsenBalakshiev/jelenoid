@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # Ваше управляющее Spring Boot приложение
   jelenoid-app:
-    build: . # Указывает на Dockerfile в текущей папке
+    build: ./jelenoid-server # Указывает на Dockerfile в текущей папке
     container_name: jelenoid-app
     ports:
       # Пробрасываем порт вашего приложения на хост
@@ -12,8 +12,8 @@ services:
       - "5005:5005"
     volumes:
       # Для горячей перезагрузки[4]
-      - ./src:/app/src
-      - ./target:/app/target
+      - ./jelenoid-server/src:/app/src
+      - ./jelenoid-server/target:/app/target
       # Важно: пробрасываем сокет Docker, чтобы приложение могло управлять контейнерами
       - /var/run/docker.sock:/var/run/docker.sock
     environment:

@@ -1,33 +1,88 @@
-HELP.md
-target/
-.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
+# ===================================================================
+# Общие правила (ОС, IDE, Редакторы)
+# ===================================================================
 
-### STS ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-
-### IntelliJ IDEA ###
-.idea
-*.iws
+# Логи IDE и файлы конфигурации
+.idea/
+.vscode/
 *.iml
+*.iws
 *.ipr
 
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
+# Файлы операционных систем
+.DS_Store
+Thumbs.db
 
-### VS Code ###
-.vscode/
+# Файлы бэкапа и временные файлы редакторов
+*~
+*.swp
+*.swo
+
+# ===================================================================
+# Правила для jelenoid-server (Java / Maven)
+# ===================================================================
+
+# Скомпилированные файлы и артефакты сборки
+jelenoid-server/target/
+jelenoid-server/**/*.class
+jelenoid-server/**/*.jar
+jelenoid-server/**/*.war
+jelenoid-server/**/*.ear
+
+# Лог-файлы
+*.log
+jelenoid-server/*.log
+jelenoid-server/logs/
+
+# Файлы бэкапа Maven
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+
+# Настройки Maven Wrapper
+.mvn/timing.properties
+# Важно: сам maven-wrapper.jar часто добавляют в git, чтобы проект был самодостаточным.
+# Если вы хотите его игнорировать, раскомментируйте строку ниже.
+!.mvn/wrapper/maven-wrapper.jar
+
+# Логи креша виртуальной машины Java
+hs_err_pid*
+
+# ===================================================================
+# Правила для jelenoid-ui (Node.js / Vite / React)
+# ===================================================================
+
+# Зависимости
+jelenoid-ui/node_modules/
+
+# Файлы сборки (Vite по умолчанию собирает в 'dist')
+jelenoid-ui/dist/
+jelenoid-ui/.vite/
+
+# Логи
+jelenoid-ui/npm-debug.log*
+jelenoid-ui/yarn-debug.log*
+jelenoid-ui/yarn-error.log*
+jelenoid-ui/pnpm-debug.log*
+
+# Секретные файлы и переменные окружения
+# Никогда не добавляйте их в Git!
+.env
+.env.local
+.env.*.local
+
+# Кеш и временные файлы
+.eslintcache
+.stylelintcache
+.prettiercache
+
+# ===================================================================
+# Секретные файлы (Общее)
+# ===================================================================
+# Файлы с секретами, которые могут появиться в будущем
+secrets/
+*.json.secret
