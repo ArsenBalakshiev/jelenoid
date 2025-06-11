@@ -17,6 +17,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.io.IOException;
 import java.net.URI;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -194,6 +195,21 @@ public class SessionService {
 
         return requestSpec.retrieve().toEntity(byte[].class);
     }
+
+    public String uploadFileToSession(String hubSessionId, String base64EncodedZip) {
+        Session session = activeSessionsService.get(hubSessionId);
+        if (session == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found: " + hubSessionId);
+        }
+
+        try {
+            return containerManagerService.copyFileToContainer(session.containerInfo().getContainerId(), base64EncodedZip);
+        } catch (IOException e) {
+            log.error("Failed to upload file to session {}", hubSessionId, e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to process file for upload", e);
+        }
+    }
+
 
     private String findImageForRequest(Map<String, Object> requestBody) {
         Map<String, Object> capabilitiesRequest = (Map<String, Object>) requestBody.get("capabilities");
