@@ -4,6 +4,8 @@ import com.balakshievas.jelenoid.dto.ContainerInfo;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.model.HostConfig;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,9 +14,15 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
+import java.util.zip.ZipInputStream;
 
 @Service
 public class ContainerManagerService {
@@ -74,6 +82,46 @@ public class ContainerManagerService {
         waitForContainerToBeReady(containerName);
 
         return new ContainerInfo(containerId, containerName);
+    }
+
+    public String copyFileToContainer(String containerId, String base64EncodedZip) throws IOException {
+        // 1. Декодируем Base64 в байты ZIP-архива
+        byte[] zipBytes = Base64.getDecoder().decode(base64EncodedZip);
+
+        String fileName;
+        byte[] fileContent;
+
+        // 2. Распаковываем ZIP-архив в памяти, чтобы получить имя и содержимое файла
+        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
+            var zipEntry = zis.getNextEntry();
+            if (zipEntry == null) {
+                throw new IOException("Invalid ZIP archive: no entries found.");
+            }
+            fileName = Path.of(zipEntry.getName()).getFileName().toString();
+            fileContent = zis.readAllBytes();
+        }
+
+        // 3. Создаем TAR-архив в памяти, так как Docker API принимает только TAR
+        ByteArrayOutputStream tarOutputStream = new ByteArrayOutputStream();
+        try (TarArchiveOutputStream tos = new TarArchiveOutputStream(tarOutputStream)) {
+            TarArchiveEntry tarEntry = new TarArchiveEntry(fileName);
+            tarEntry.setSize(fileContent.length);
+            tos.putArchiveEntry(tarEntry);
+            tos.write(fileContent);
+            tos.closeArchiveEntry();
+        }
+        byte[] tarBytes = tarOutputStream.toByteArray();
+
+        // 4. Копируем TAR-архив в контейнер в директорию /tmp
+        dockerClient.copyArchiveToContainerCmd(containerId)
+                .withTarInputStream(new ByteArrayInputStream(tarBytes))
+                .withRemotePath("/tmp/")
+                .exec();
+
+        String filePathInContainer = "/tmp/" + fileName;
+        log.info("File {} successfully uploaded to container {} at path {}", fileName, containerId, filePathInContainer);
+
+        return filePathInContainer;
     }
 
     private void waitForContainerToBeReady(String containerIpAddress) {
