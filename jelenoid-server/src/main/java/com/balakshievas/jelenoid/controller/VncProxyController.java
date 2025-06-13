@@ -48,7 +48,7 @@ public class VncProxyController {
             return;
         }
 
-        WebSocketHandler vncHandler = new VncProxySocketHandler(session.containerInfo());
+        WebSocketHandler vncHandler = new VncProxySocketHandler(session.getContainerInfo());
 
         var attributes = new HashMap<String, Object>();
         attributes.put("sessionId", sessionId);

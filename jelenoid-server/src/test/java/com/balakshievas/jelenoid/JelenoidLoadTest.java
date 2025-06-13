@@ -5,15 +5,14 @@ import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
+import org.openqa.selenium.remote.DesiredCapabilities;
 import org.openqa.selenium.remote.RemoteWebDriver;
 
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
@@ -89,7 +88,16 @@ public class JelenoidLoadTest {
             // Установка таймаута на стороне клиента, чтобы он не ждал вечно
             options.setPageLoadTimeout(Duration.ofSeconds(60));
 
-            driver = new RemoteWebDriver(HUB_URL, options);
+            DesiredCapabilities capabilities = new DesiredCapabilities();
+            capabilities.setBrowserName("chrome");
+            capabilities.setVersion("133");
+            capabilities.setCapability(ChromeOptions.CAPABILITY, options);
+            Map<String, Object> selenoidOptions = new HashMap<>();
+            selenoidOptions.put("enableVNC", true);
+
+            capabilities.setCapability("selenoid:options", selenoidOptions);
+
+            driver = new RemoteWebDriver(HUB_URL, capabilities);
 
             Instant end = Instant.now();
             long timeElapsed = Duration.between(start, end).toMillis();

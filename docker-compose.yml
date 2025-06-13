@@ -2,9 +2,9 @@ version: '3.8'
 
 services:
   # Ваше управляющее Spring Boot приложение
-  jelenoid-app:
+  jelenoid-server:
     build: ./jelenoid-server # Указывает на Dockerfile в текущей папке
-    container_name: jelenoid-app
+    container_name: jelenoid-server
     ports:
       # Пробрасываем порт вашего приложения на хост
       - "4444:4444"
@@ -24,6 +24,25 @@ services:
     # Подключаем приложение к нашей сети
     networks:
       - jelenoid-net
+  jelenoid-ui:
+    image: node:20-alpine # Используем официальный легковесный образ Node.js
+    container_name: jelenoid-ui
+    working_dir: /app
+    volumes:
+      # Монтируем наш локальный код в контейнер для live-reload
+      - ./jelenoid-ui:/app
+    stdin_open: true
+    tty: true
+    ports:
+      # Пробрасываем порт Vite на нашу машину
+      - "5173:5173"
+    # Запускаем установку зависимостей и сервер разработки
+    # Флаг --host необходим, чтобы сервер был доступен извне контейнера
+    command: sh -c "npm install && npm run dev -- --host"
+    networks:
+      - jelenoid-net
+    depends_on:
+      - jelenoid-server
 
 # Объявляем сеть
 networks:

@@ -1,11 +1,15 @@
 package com.balakshievas.jelenoid.service;
 
 import com.balakshievas.jelenoid.config.TaskExecutorConfig;
+import com.balakshievas.jelenoid.controller.StatusController;
+import com.balakshievas.jelenoid.dto.BrowserInfo;
 import com.balakshievas.jelenoid.dto.ContainerInfo;
 import com.balakshievas.jelenoid.dto.PendingRequest;
 import com.balakshievas.jelenoid.dto.Session;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.dockerjava.api.async.ResultCallback;
+import com.github.dockerjava.api.model.Frame;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,8 +21,10 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.net.URI;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -38,12 +44,23 @@ public class SessionService {
     @Value("${server.port:4444}")
     private int serverPort;
 
-    @Autowired private BrowserManagerService browserManagerService;
-    @Autowired private ActiveSessionsService activeSessionsService;
-    @Autowired private ContainerManagerService containerManagerService;
-    @Autowired private RestClient restClient;
-    @Autowired private ObjectMapper objectMapper;
-    @Autowired @Qualifier(TaskExecutorConfig.SESSION_TASK_EXECUTOR) private Executor taskExecutor;
+    @Autowired
+    private EmitterService emitterService;
+    @Autowired
+    private StatusController statusController;
+    @Autowired
+    private BrowserManagerService browserManagerService;
+    @Autowired
+    private ActiveSessionsService activeSessionsService;
+    @Autowired
+    private ContainerManagerService containerManagerService;
+    @Autowired
+    private RestClient restClient;
+    @Autowired
+    private ObjectMapper objectMapper;
+    @Autowired
+    @Qualifier(TaskExecutorConfig.SESSION_TASK_EXECUTOR)
+    private Executor taskExecutor;
 
     public CompletableFuture<Map<String, Object>> createSessionOrQueue(Map<String, Object> requestBody) {
         if (activeSessionsService.tryReserveSlot()) {
@@ -60,10 +77,11 @@ public class SessionService {
                     activeSessionsService.getInProgressCount(), sessionLimit, activeSessionsService.getQueueSize());
 
             CompletableFuture<Map<String, Object>> future = new CompletableFuture<>();
-            PendingRequest pendingRequest = new PendingRequest(requestBody, future);
+            PendingRequest pendingRequest = new PendingRequest(requestBody, future, Instant.now());
             future.orTimeout(queueTimeoutSeconds, TimeUnit.SECONDS);
 
             if (activeSessionsService.offerToQueue(pendingRequest)) {
+                dispatchStatusUpdate();
                 return future;
             } else {
                 log.warn("Queue is full. Rejecting request.");
@@ -73,7 +91,7 @@ public class SessionService {
     }
 
     private Map<String, Object> createSessionInternal(Map<String, Object> requestBody) {
-        String image = findImageForRequest(requestBody);
+        BrowserInfo browserInfo = findImageForRequest(requestBody);
 
         Map<String, Object> selenoidOptions = findSelenoidOptions(requestBody);
 
@@ -84,9 +102,13 @@ public class SessionService {
         String videoName = getStringOption(selenoidOptions, "videoName");
         String logName = getStringOption(selenoidOptions, "logName");
 
+        if(browserInfo == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Not found images for your browser");
+        }
+
         ContainerInfo containerInfo = null;
         try {
-            containerInfo = containerManagerService.startContainer(image, enableVnc, enableVideo, enableLog,
+            containerInfo = containerManagerService.startContainer(browserInfo.getDockerImageName(), enableVnc, enableVideo, enableLog,
                     videoName, logName);
 
             String createSessionUrl = "http://" + containerInfo.getContainerName() + ":4444/session";
@@ -97,7 +119,8 @@ public class SessionService {
                     .retrieve()
                     .toEntity(String.class);
 
-            Map<String, Object> responseBody = objectMapper.readValue(response.getBody(), new TypeReference<>() {});
+            Map<String, Object> responseBody = objectMapper.readValue(response.getBody(), new TypeReference<>() {
+            });
             Map<String, Object> responseValue = (Map<String, Object>) responseBody.get("value");
             String remoteSessionId = (String) responseValue.get("sessionId");
 
@@ -106,8 +129,11 @@ public class SessionService {
             }
 
             String hubSessionId = UUID.randomUUID().toString();
-            Session session = new Session(hubSessionId, remoteSessionId, containerInfo);
+            Session session = new Session(hubSessionId, remoteSessionId, containerInfo,
+                    browserInfo.getName(), browserInfo.getVersion(), enableVnc);
             activeSessionsService.sessionSuccessfullyCreated(hubSessionId, session);
+
+            dispatchStatusUpdate();
 
             Map<String, Object> containerCapabilities = (Map<String, Object>) responseValue.get("capabilities");
             if (containerCapabilities.containsKey("goog:chromeOptions")) {
@@ -135,8 +161,9 @@ public class SessionService {
 
     public void deleteSession(String hubSessionId) {
         Session session = activeSessionsService.sessionDeleted(hubSessionId);
+        dispatchStatusUpdate();
         if (session != null) {
-            containerManagerService.stopContainer(session.containerInfo().getContainerId());
+            containerManagerService.stopContainer(session.getContainerInfo().getContainerId());
             processQueue();
         }
     }
@@ -145,6 +172,7 @@ public class SessionService {
         if (activeSessionsService.getQueueSize() > 0) {
             if (activeSessionsService.tryReserveSlot()) {
                 PendingRequest nextRequest = activeSessionsService.pollFromQueue();
+                dispatchStatusUpdate();
                 if (nextRequest != null) {
                     log.info("Processing next request from queue...");
                     CompletableFuture.supplyAsync(() -> createSessionInternal(nextRequest.getRequestBody()), taskExecutor)
@@ -173,8 +201,8 @@ public class SessionService {
 
         session.updateActivity();
 
-        ContainerInfo containerInfo = session.containerInfo();
-        String remoteSessionId = session.remoteSessionId();
+        ContainerInfo containerInfo = session.getContainerInfo();
+        String remoteSessionId = session.getRemoteSessionId();
 
         String pathForContainer = relativePath.replace(hubSessionId, remoteSessionId);
 
@@ -203,18 +231,31 @@ public class SessionService {
         }
 
         try {
-            return containerManagerService.copyFileToContainer(session.containerInfo().getContainerId(), base64EncodedZip);
+            return containerManagerService.copyFileToContainer(session.getContainerInfo().getContainerId(), base64EncodedZip);
         } catch (IOException e) {
             log.error("Failed to upload file to session {}", hubSessionId, e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to process file for upload", e);
         }
     }
 
+    public Closeable streamLogsForSession(String hubSessionId, ResultCallback<Frame> callback) {
+        Session session = activeSessionsService.get(hubSessionId);
+        if (session == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found: " + hubSessionId);
+        }
+        return containerManagerService.streamContainerLogs(session.getContainerInfo().getContainerId(), callback);
+    }
 
-    private String findImageForRequest(Map<String, Object> requestBody) {
+    private void dispatchStatusUpdate() {
+        Object statusResponse = statusController.getStatus();
+        emitterService.dispatch(statusResponse);
+    }
+
+    private BrowserInfo findImageForRequest(Map<String, Object> requestBody) {
         Map<String, Object> capabilitiesRequest = (Map<String, Object>) requestBody.get("capabilities");
         Map<String, Object> alwaysMatch = (Map<String, Object>) capabilitiesRequest.getOrDefault("alwaysMatch", Collections.emptyMap());
         List<Map<String, Object>> firstMatch = (List<Map<String, Object>>) capabilitiesRequest.getOrDefault("firstMatch", List.of(Collections.emptyMap()));
+        BrowserInfo browserInfoResult = null;
 
         for (Map<String, Object> firstMatchOption : firstMatch) {
             Map<String, Object> mergedCapabilities = new HashMap<>(alwaysMatch);
@@ -224,7 +265,11 @@ public class SessionService {
             if (browserName != null) {
                 String image = browserManagerService.getImageByBrowserNameAndVersion(browserName, browserVersion);
                 if (image != null) {
-                    return image;
+                    if (browserVersion == null) {
+                        return new BrowserInfo(browserName, null, image, true);
+                    } else {
+                        return new BrowserInfo(browserName, browserVersion, image, false);
+                    }
                 }
             }
         }

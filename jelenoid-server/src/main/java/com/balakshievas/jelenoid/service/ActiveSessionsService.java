@@ -88,9 +88,9 @@ public class ActiveSessionsService {
             Session session = entry.getValue();
             if (System.currentTimeMillis() - session.getLastActivity() > sessionTimeoutMillis) {
                 log.warn("Session {} has timed out. Releasing slot and stopping container {}.",
-                        session.hubSessionId(), session.containerInfo().getContainerId());
+                        session.getHubSessionId(), session.getContainerInfo().getContainerId());
                 releaseSlot();
-                containerManagerService.stopContainer(session.containerInfo().getContainerId());
+                containerManagerService.stopContainer(session.getContainerInfo().getContainerId());
                 sessionService.processQueue();
                 return true;
             }
@@ -102,7 +102,7 @@ public class ActiveSessionsService {
     public void cleanup() {
         log.info("Shutting down... stopping all {} active containers.", activeSessions.size());
         activeSessions.values().parallelStream().forEach(session -> {
-            containerManagerService.stopContainer(session.containerInfo().getContainerId());
+            containerManagerService.stopContainer(session.getContainerInfo().getContainerId());
         });
         activeSessions.clear();
         pendingRequests.clear();

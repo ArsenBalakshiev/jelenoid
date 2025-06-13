@@ -2,7 +2,9 @@ package com.balakshievas.jelenoid.service;
 
 import com.balakshievas.jelenoid.dto.ContainerInfo;
 import com.github.dockerjava.api.DockerClient;
+import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.CreateContainerResponse;
+import com.github.dockerjava.api.model.Frame;
 import com.github.dockerjava.api.model.HostConfig;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
@@ -16,6 +18,7 @@ import org.springframework.web.client.RestClient;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.Closeable;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -122,6 +125,15 @@ public class ContainerManagerService {
         log.info("File {} successfully uploaded to container {} at path {}", fileName, containerId, filePathInContainer);
 
         return filePathInContainer;
+    }
+
+    public Closeable streamContainerLogs(String containerId, ResultCallback<Frame> callback) {
+        return dockerClient.logContainerCmd(containerId)
+                .withStdOut(true)
+                .withStdErr(true)
+                .withTailAll()
+                .withFollowStream(true)
+                .exec(callback);
     }
 
     private void waitForContainerToBeReady(String containerIpAddress) {

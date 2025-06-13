@@ -51,14 +51,14 @@ public class DevToolsProxyController {
             return;
         }
 
-        ContainerInfo containerInfo = session.containerInfo();
+        ContainerInfo containerInfo = session.getContainerInfo();
         if (containerInfo == null) {
             response.sendError(HttpStatus.NOT_FOUND.value(), "Container for session not found");
             return;
         }
 
         URI targetUri = UriComponentsBuilder.fromUriString("ws://" + containerInfo.getContainerName() + ":7070")
-                .path("/devtools/page/" + session.remoteSessionId())
+                .path("/devtools/page/" + session.getRemoteSessionId())
                 .build().toUri();
 
         log.info("Attempting to upgrade request for session {} to WebSocket, proxying to {}", sessionId, targetUri);
