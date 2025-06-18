@@ -34,7 +34,7 @@ const App: React.FC = () => {
         <div className="App">
             <Header />
             <div className="main-layout">
-                <div>
+                <div className="tabs-block">
                     <Tabs
                         tabs={TABS}
                         activeTab={activeTab}

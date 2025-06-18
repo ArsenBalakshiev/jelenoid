@@ -8,8 +8,8 @@ interface TabsProps {
     align?: 'left' | 'center' | 'right';
 }
 
-const Tabs: React.FC<TabsProps> = ({ activeTab, onTabChange, tabs, align = 'left' }) => (
-    <div className={`tabs tabs-align-${align}`}>
+const Tabs: React.FC<TabsProps> = ({ activeTab, onTabChange, tabs, align = 'center' }) => (
+    <div className={`tabs tabs-align-center`}>
         {tabs.map(tab => (
             <button
                 key={tab.value}

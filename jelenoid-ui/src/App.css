@@ -60,3 +60,10 @@ code {
   flex: 1;
   padding: 32px;
 }
+
+.tabs-block {
+  flex: 1 1 0;                /* ← ключевая строка */
+  display: flex;
+  flex-direction: column;     /* сверху Tabs, ниже контент */
+  min-width: 0;               /* чтобы не «распирало» */
+}

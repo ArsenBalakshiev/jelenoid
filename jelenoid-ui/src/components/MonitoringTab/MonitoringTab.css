@@ -21,3 +21,6 @@
 /* ------------ карточки справа ------------ */
 .vnc-card  { flex: 0 0 55%; }  /* 65 % */
 .logs-card { flex: 0 0 45%; }  /* 35 % */
+
+.session-actions { display:flex; gap:6px; margin-top:8px; }
+.session-actions .danger { background:#b40e0e; color:#fff; }

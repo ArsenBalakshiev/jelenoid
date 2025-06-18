@@ -1,31 +1,61 @@
+/* ----------------------------------------------------------- */
+/* Tabs layout                                                 */
+/* ----------------------------------------------------------- */
 .tabs {
     display: flex;
+    width: 100%;            /* ← растягиваем на всю строку */
     gap: 8px;
-    margin-bottom: 24px;
-    border-bottom: 1px solid #222;
-    background: #111;
     padding: 0 24px;
+    margin-bottom: 24px;
+    background: #111;
+    border-bottom: 1px solid #222;
+    box-sizing: border-box; /* чтобы padding не увеличивал ширину */
 }
 
+/* Выравнивание панели */
 .tabs-align-left   { justify-content: flex-start; }
 .tabs-align-center { justify-content: center; }
 .tabs-align-right  { justify-content: flex-end; }
 
+/* ----------------------------------------------------------- */
+/* Кнопка-вкладка                                              */
+/* ----------------------------------------------------------- */
 .tab-btn {
-    padding: 10px 28px;
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 10px 0;
     border: none;
     background: transparent;
     color: #fff;
     cursor: pointer;
     border-radius: 6px 6px 0 0;
     font-size: 16px;
-    opacity: 0.8;
-    transition: opacity 0.2s, background 0.2s;
-    border-bottom: 2px solid transparent;
+    line-height: 1.2;
+    opacity: .8;
+    transition: opacity .2s;
+    text-align: center;
+    position: relative;
+    box-sizing: border-box;
+    white-space: nowrap;
 }
-.tab-btn.active {
-    background: #000;
-    opacity: 1;
-    font-weight: bold;
-    border-bottom: 2px solid #ff0000;
+
+.tab-btn.active::before {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 2px;
+    background: #ff0000;
 }
+.tab-btn:hover,
+.tab-btn.active { opacity: 1; }
+
+/* исключаем псевдо-элементы из расчёта ширины/высоты */
+.tab-btn,
+.tab-btn::before {
+    box-sizing: border-box;
+}
+
+/* Симметрия края при gap: делим отступ поровну,
+   чтобы не было «смещения» первой и последней вкладки */
+.tabs > .tab-btn:first-child { margin-left: calc(8px / 2); }
+.tabs > .tab-btn:last-child  { margin-right: calc(8px / 2); }
