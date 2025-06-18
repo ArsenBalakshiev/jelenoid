@@ -30,7 +30,6 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
 
 @Service
 public class SessionService {
@@ -108,7 +107,7 @@ public class SessionService {
         String videoName = getStringOption(selenoidOptions, "videoName");
         String logName = getStringOption(selenoidOptions, "logName");
 
-        if(browserInfo == null) {
+        if (browserInfo == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Not found images for your browser");
         }
 
