@@ -16,6 +16,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
@@ -37,8 +39,6 @@ public class SessionService {
 
     @Value("${jelenoid.limit}")
     private int sessionLimit;
-    @Value("${jelenoid.queue.timeout}")
-    private long queueTimeoutSeconds;
     @Value("${server.address:localhost}")
     private String serverAddress;
     @Value("${server.port:4444}")
@@ -62,6 +62,12 @@ public class SessionService {
     @Qualifier(TaskExecutorConfig.SESSION_TASK_EXECUTOR)
     private Executor taskExecutor;
 
+    @Async
+    @Scheduled(fixedRate = 5000)
+    public void events() {
+        dispatchStatusUpdate();
+    }
+
     public CompletableFuture<Map<String, Object>> createSessionOrQueue(Map<String, Object> requestBody) {
         if (activeSessionsService.tryReserveSlot()) {
             return CompletableFuture.supplyAsync(() -> createSessionInternal(requestBody), taskExecutor)
@@ -77,8 +83,8 @@ public class SessionService {
                     activeSessionsService.getInProgressCount(), sessionLimit, activeSessionsService.getQueueSize());
 
             CompletableFuture<Map<String, Object>> future = new CompletableFuture<>();
-            PendingRequest pendingRequest = new PendingRequest(requestBody, future, Instant.now());
-            future.orTimeout(queueTimeoutSeconds, TimeUnit.SECONDS);
+            PendingRequest pendingRequest = new PendingRequest(requestBody, future, Instant.now(), System.currentTimeMillis());
+            //future.orTimeout(queueTimeoutSeconds, TimeUnit.SECONDS);
 
             if (activeSessionsService.offerToQueue(pendingRequest)) {
                 dispatchStatusUpdate();

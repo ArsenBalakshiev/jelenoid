@@ -1,0 +1,31 @@
+.tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid #222;
+    background: #111;
+    padding: 0 24px;
+}
+
+.tabs-align-left   { justify-content: flex-start; }
+.tabs-align-center { justify-content: center; }
+.tabs-align-right  { justify-content: flex-end; }
+
+.tab-btn {
+    padding: 10px 28px;
+    border: none;
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+    border-radius: 6px 6px 0 0;
+    font-size: 16px;
+    opacity: 0.8;
+    transition: opacity 0.2s, background 0.2s;
+    border-bottom: 2px solid transparent;
+}
+.tab-btn.active {
+    background: #000;
+    opacity: 1;
+    font-weight: bold;
+    border-bottom: 2px solid #ff0000;
+}

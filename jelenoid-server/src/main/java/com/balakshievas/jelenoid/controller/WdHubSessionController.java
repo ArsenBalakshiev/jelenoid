@@ -19,9 +19,6 @@ public class WdHubSessionController {
     @Autowired
     private SessionService sessionService;
 
-    @Value("${jelenoid.queue.timeout}") // Таймаут из конфига
-    private long queueTimeoutSeconds;
-
     @PostMapping("/session")
     public CompletableFuture<Map<String, Object>> createSession(@RequestBody Map<String, Object> requestBody) {
         return sessionService.createSessionOrQueue(requestBody);

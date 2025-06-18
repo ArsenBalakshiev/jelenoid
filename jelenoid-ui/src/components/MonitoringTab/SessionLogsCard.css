@@ -1,0 +1,25 @@
+.logs-card {
+    display: flex;
+    flex-direction: column;
+    background: #232323;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.logs-header {
+    padding: 8px 12px;
+    font-weight: 600;
+    border-bottom: 1px solid #333;
+}
+
+.logs-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 8px 12px;
+    font-family: "Fira Mono", monospace;
+    font-size: 13px;
+    line-height: 1.4;
+    color: #e0e0e0;
+}
+
+.log-line { white-space: pre-wrap; }

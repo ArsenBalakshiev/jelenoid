@@ -31,6 +31,8 @@ public class ActiveSessionsService {
     private int queueLimit;
     @Value("${jelenoid.timeouts.session}")
     private long sessionTimeoutMillis;
+    @Value("${jelenoid.timeouts.queue}")
+    private long queueTimeoutMillis;
 
     private final Map<String, Session> activeSessions = new ConcurrentHashMap<>();
     private BlockingQueue<PendingRequest> pendingRequests;
@@ -92,6 +94,17 @@ public class ActiveSessionsService {
                 releaseSlot();
                 containerManagerService.stopContainer(session.getContainerInfo().getContainerId());
                 sessionService.processQueue();
+                return true;
+            }
+            return false;
+        });
+
+        pendingRequests.removeIf(entry -> {
+            if (System.currentTimeMillis() - entry.getStartTime() > queueTimeoutMillis) {
+                entry.getFuture().complete(Map.of("value", Map.of("error", "session not created",
+                        "message", "Queue timeout")));
+                entry.getFuture().cancel(true);
+                log.warn("Pending request has timed out. Releasing slot.");
                 return true;
             }
             return false;

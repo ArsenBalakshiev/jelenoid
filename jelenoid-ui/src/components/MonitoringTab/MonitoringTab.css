@@ -1,0 +1,23 @@
+.monitoring-layout {
+    display: flex;
+    gap: 24px;
+    height: 100%;
+}
+
+/* левая колонка */
+.sessions-list {
+    flex: 0 0 330px;
+    overflow-y: auto;
+}
+
+/* правая колонка (VNC + логи) */
+.monitoring-side {
+    flex: 1 1 0;
+    display: flex;
+    gap: 16px;
+    height: 100%;
+}
+
+/* ------------ карточки справа ------------ */
+.vnc-card  { flex: 0 0 55%; }  /* 65 % */
+.logs-card { flex: 0 0 45%; }  /* 35 % */
