@@ -1,61 +1,67 @@
-/* ----------------------------------------------------------- */
-/* Tabs layout                                                 */
-/* ----------------------------------------------------------- */
+/* ─── панель вкладок ─── */
 .tabs {
     display: flex;
-    width: 100%;            /* ← растягиваем на всю строку */
+    width: 100%;
     gap: 8px;
     padding: 0 24px;
     margin-bottom: 24px;
     background: #111;
     border-bottom: 1px solid #222;
-    box-sizing: border-box; /* чтобы padding не увеличивал ширину */
+    box-sizing: border-box;
 }
 
-/* Выравнивание панели */
-.tabs-align-left   { justify-content: flex-start; }
-.tabs-align-center { justify-content: center; }
-.tabs-align-right  { justify-content: flex-end; }
-
-/* ----------------------------------------------------------- */
-/* Кнопка-вкладка                                              */
-/* ----------------------------------------------------------- */
+/* ─── кнопка-вкладка ─── */
 .tab-btn {
     flex: 1 1 0;
     min-width: 0;
-    padding: 10px 0;
+    padding: 12px 0;
     border: none;
     background: transparent;
     color: #fff;
     cursor: pointer;
-    border-radius: 6px 6px 0 0;
+    text-align: center;
     font-size: 16px;
     line-height: 1.2;
     opacity: .8;
-    transition: opacity .2s;
-    text-align: center;
     position: relative;
-    box-sizing: border-box;
+    transition: color .2s, opacity .2s, transform .2s;
     white-space: nowrap;
+    overflow: hidden;          /* обрезаем псевдо-элементы */
 }
 
-.tab-btn.active::before {
+/* «подсветка» при наведении */
+.tab-btn:hover {
+    opacity: 1;
+    transform: translateY(-2px);       /* лёгкий «подъём» */
+}
+
+/* ─── активная вкладка ─── */
+.tab-btn.active {
+    opacity: 1;
+    color: #fff;
+    /* градиентный фон + небольшая тень — визуально заметно[1] */
+    background: linear-gradient(180deg, #ff4141 0%, #c40000 100%);
+    box-shadow: 0 2px 6px rgba(255,0,0,.4);   /* лёгкое свечение[1] */
+}
+
+/* подчёркивание рисуем линией, которая выезжает анимировано */
+.tab-btn::after {
     content: '';
     position: absolute;
-    left: 0; right: 0; bottom: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     height: 2px;
-    background: #ff0000;
+    background: transparent;
+    transition: transform .3s ease;          /* плавное появление[1] */
+    transform: translateX(-100%);
 }
-.tab-btn:hover,
-.tab-btn.active { opacity: 1; }
 
-/* исключаем псевдо-элементы из расчёта ширины/высоты */
+.tab-btn.active::after {
+    background: #fff;
+    transform: translateX(0);                /* линия «выезжает» */
+}
+
 .tab-btn,
-.tab-btn::before {
-    box-sizing: border-box;
-}
-
-/* Симметрия края при gap: делим отступ поровну,
-   чтобы не было «смещения» первой и последней вкладки */
-.tabs > .tab-btn:first-child { margin-left: calc(8px / 2); }
-.tabs > .tab-btn:last-child  { margin-right: calc(8px / 2); }
+.tab-btn::after,
+.tab-btn.active { box-sizing: border-box; }
