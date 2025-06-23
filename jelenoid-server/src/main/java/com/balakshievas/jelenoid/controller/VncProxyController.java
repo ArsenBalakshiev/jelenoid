@@ -56,7 +56,7 @@ public class VncProxyController {
         this.upgradeStrategy.upgrade(
                 httpRequest,
                 httpResponse,
-                null,
+                "binary",
                 Collections.emptyList(),
                 request.getUserPrincipal(),
                 vncHandler,

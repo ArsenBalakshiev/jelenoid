@@ -1,0 +1,178 @@
+/* --- Стили для формы ручного запуска сессий в черно-красном стиле --- */
+
+.manual-session-tab {
+    padding: 32px;
+    background-color: #1a1a1a; /* Темный фон, как в терминале */
+    border-radius: 8px;
+    max-width: 600px;
+    margin: 0 auto;
+    border: 1px solid #333;
+}
+
+.manual-session-tab h2 {
+    margin-top: 0;
+    margin-bottom: 24px;
+    color: #f0f0f0; /* Светлый текст для заголовка */
+    font-size: 1.5rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px solid #ff0000; /* Красный акцентный разделитель */
+    padding-bottom: 12px;
+}
+
+.session-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px; /* Увеличим отступ для лучшей читаемости */
+}
+
+.form-row {
+    display: flex;
+    gap: 20px;
+}
+
+.form-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #cccccc; /* Светло-серый, как у status-label */
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+}
+
+/* Стилизация полей ввода и выпадающих списков */
+.form-group select {
+    padding: 12px;
+    border-radius: 4px;
+    border: 1px solid #444;
+    font-size: 1rem;
+    background-color: #2b2b2b; /* Темный фон для полей */
+    color: #ffffff; /* Белый текст */
+    -webkit-appearance: none; /* Убираем стандартный вид для кастомизации стрелки */
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23cccccc%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 10px;
+}
+
+.form-group select:focus {
+    outline: none;
+    border-color: #ff0000; /* Красная рамка при фокусе */
+    box-shadow: 0 0 8px rgba(255, 0, 0, 0.5);
+}
+
+.form-group select:disabled {
+    background-color: #333;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* --- Стили для кастомного чекбокса (исправленная версия) --- */
+
+/* Контейнер для чекбокса и его метки */
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    position: relative; /* Необходимо для позиционирования input */
+}
+
+/* Скрываем оригинальный чекбокс, но оставляем его рабочим */
+.custom-checkbox-input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+}
+
+/* Стили для метки, которая теперь является основной кликабельной областью */
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-weight: 500;
+    color: #cccccc;
+    user-select: none;
+}
+
+/* Рисуем наш кастомный чекбокс с помощью псевдоэлемента ::before */
+.checkbox-label::before {
+    content: '';
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    margin-right: 12px; /* Отступ от текста */
+    border: 2px solid #555;
+    border-radius: 3px;
+    background-color: #2b2b2b;
+    transition: all 0.2s;
+}
+
+/* КЛЮЧЕВОЙ СЕЛЕКТОР: Когда input получает :checked, мы стилизуем СЛЕДУЮЩИЙ за ним label */
+.custom-checkbox-input:checked + .checkbox-label::before {
+    background-color: #ff0000;
+    border-color: #ff0000;
+    background-image: url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"%3e%3cpath fill="%23fff" d="M6.564.75l-3.59 3.6-1.5-1.5-.707.707 2.207 2.207 4.293-4.293z"/%3e%3c/svg%3e');
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+/* Добавляем стили для состояния фокуса для доступности (например, при навигации с клавиатуры) */
+.custom-checkbox-input:focus + .checkbox-label::before {
+    box-shadow: 0 0 0 2px rgba(255, 0, 0, 0.5);
+}
+
+/* Стили для отключенного состояния */
+.custom-checkbox-input:disabled + .checkbox-label {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+
+
+
+/* Кнопка */
+.submit-btn {
+    padding: 12px 20px;
+    font-size: 1rem;
+    font-weight: bold;
+    color: #fff;
+    background-color: #ff0000; /* Фирменный красный */
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.submit-btn:hover:not(:disabled) {
+    background-color: #cc0000; /* Затемняем при наведении */
+}
+
+.submit-btn:active:not(:disabled) {
+    transform: scale(0.98); /* Легкое нажатие */
+}
+
+.submit-btn:disabled {
+    background-color: #555;
+    color: #999;
+    cursor: not-allowed;
+}
+
+/* Сообщение об ошибке */
+.error-message {
+    color: #ffdddd;
+    background-color: rgba(255, 0, 0, 0.15);
+    border: 1px solid #ff0000;
+    border-radius: 4px;
+    padding: 12px;
+    margin-top: 16px;
+}

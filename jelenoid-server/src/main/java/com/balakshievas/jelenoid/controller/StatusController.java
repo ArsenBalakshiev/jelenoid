@@ -39,8 +39,8 @@ public class StatusController {
         return new StatusResponse(
                 sessionLimit,
                 sessions.size(),
-                activeSessionsService.getInProgressCount(),
                 activeSessionsService.getQueueSize(),
+                activeSessionsService.getInProgressCount(),
                 sessions,
                 queuedRequestInfos
         );

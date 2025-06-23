@@ -1,16 +1,58 @@
-import { Dashboard } from './components/Dashboard';
-import { ThemeProvider, CssBaseline } from '@mui/material';
-import { theme } from './theme';
+import React, {useEffect, useState} from 'react';
+import Header from './components/header';
+import Tabs from './components/tabs';
+import MonitoringTab from './components/MonitoringTab/MonitoringTab';
+import ManualSessionTab from './components/ManualSessionTab/ManualSessionTab';
+import './App.css';
+import {ServerState} from "./types/server.ts";
 
-function App() {
+const TABS = [
+    { label: 'Monitoring', value: 'monitoring' },
+    { label: 'Manual session', value: 'manual' }
+];
+
+const App: React.FC = () => {
+    const [activeTab, setActiveTab] = useState<string>('monitoring');
+
+    const [serverState, setServerState] = useState<ServerState>({
+        total: 0, used: 0, queued: 0, inProgress: 0, sessions: [], queuedRequests: []
+    });
+
+    // SSE подписка (примерно как в Header)
+    useEffect(() => {
+        const es = new EventSource('/events');
+        es.addEventListener('state-update', (event) => {
+            try {
+                const data = JSON.parse((event as MessageEvent).data);
+                setServerState(data);
+            } catch {}
+        });
+        return () => es.close();
+    }, []);
+
     return (
-        // ThemeProvider применяет нашу кастомную тему ко всем дочерним компонентам
-        <ThemeProvider theme={theme}>
-            {/* CssBaseline сбрасывает стили браузера и применяет базовые цвета темы */}
-            <CssBaseline />
-            <Dashboard />
-        </ThemeProvider>
+        <div className="App">
+            <Header />
+            <div className="main-layout">
+                <div className="tabs-block">
+                    <Tabs
+                        tabs={TABS}
+                        activeTab={activeTab}
+                        onTabChange={setActiveTab}
+                        align="left"
+                        className="vertical"
+                    />
+                    <div className="tab-content">
+                        {activeTab === 'monitoring' && (
+                            <MonitoringTab sessions={serverState.sessions}/>
+                        )}
+                        {activeTab === 'manual' && <ManualSessionTab/>}
+                    </div>
+                </div>
+
+            </div>
+        </div>
     );
-}
+};
 
 export default App;

@@ -3,7 +3,6 @@ package com.balakshievas.jelenoid.controller;
 import com.balakshievas.jelenoid.service.SessionService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
@@ -18,9 +17,6 @@ public class WdHubSessionController {
 
     @Autowired
     private SessionService sessionService;
-
-    @Value("${jelenoid.queue.timeout}") // Таймаут из конфига
-    private long queueTimeoutSeconds;
 
     @PostMapping("/session")
     public CompletableFuture<Map<String, Object>> createSession(@RequestBody Map<String, Object> requestBody) {

@@ -9,10 +9,9 @@ spring:
     name: jelenoid
 
 jelenoid:
-  limit: ${PARALLEL_SESSIONS:5}
+  limit: ${PARALLEL_SESSIONS:10}
   queue:
     limit: ${QUEUE_LIMIT:100}
-    timeout: ${QUEUE_TIMEOUT:300}
   logs:
     dir: ${LOG_OUTPUT_DIR:/logs}
   video:
@@ -23,13 +22,15 @@ jelenoid:
   browsers:
     config-dir: ${BROWSERS_FILE:}
   timeouts:
-    session: ${SESSION_TIMEOUT:600000}
+    queue: ${QUEUE_TIMEOUT:30000}
+    session: ${SESSION_TIMEOUT:60000}
     startup: ${STARTUP_TIMEOUT:30000}
     cleanup: ${CLEANUP_TIMEOUT:15000}
   executor:
     core-pool-size: ${EXECUTOR_POOL_SIZE:5}
     max-pool-size: ${EXECXUTOR_MAX_POOL_SIZE:10}
     queue-capacity: ${EXECUTOR_QUEUE_CAPACITY:100}
+  ui_hosts: ${UI_HOSTS_LIST:http://localhost:3000,http://localhost:4444}
 
 management:
   endpoint:
