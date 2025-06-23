@@ -4,6 +4,12 @@
     background: #232323;
     border-radius: 10px;
     overflow: hidden;
+
+    /* --- ИСПРАВЛЕНИЕ ЗДЕСЬ --- */
+    flex-grow: 1; /* Говорим карточке занять всё доступное вертикальное пространство */
+
+    /* Дополнительное улучшение: предотвращает проблемы со скроллингом во вложенных flex-контейнерах */
+    min-height: 0;
 }
 
 .logs-header {
@@ -22,4 +28,6 @@
     color: #e0e0e0;
 }
 
-.log-line { white-space: pre-wrap; }
+.log-line {
+    white-space: pre-wrap;
+}

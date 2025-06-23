@@ -55,7 +55,9 @@ const MonitoringTab: React.FC<Props> = ({ sessions, setSessions }) => {
             <div className="monitoring-side">
                 {selected && (
                     <>
-                        <VncSessionCard  sessionId={selected.hubSessionId} />
+                        {selected.vncEnabled && (
+                            <VncSessionCard sessionId={selected.hubSessionId} />
+                        )}
                         <SessionLogsCard sessionId={selected.hubSessionId} />
                     </>
                 )}

@@ -9,7 +9,7 @@ interface TabsProps {
 }
 
 const Tabs: React.FC<TabsProps> = ({ activeTab, onTabChange, tabs, align = 'center' }) => (
-    <div className={`tabs tabs-align-center`}>
+    <div className={`tabs tabs-align-${align}`}>
         {tabs.map(tab => (
             <button
                 key={tab.value}

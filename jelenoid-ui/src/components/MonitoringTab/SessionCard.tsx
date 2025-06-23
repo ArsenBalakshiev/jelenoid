@@ -15,7 +15,7 @@ const SessionCard: React.FC<Props> = ({ session, active, onOpen, onClose }) => (
       <span className="browser">
         {session.browserName} {session.browserVersion}
       </span>
-            <span className="vnc-badge">VNC</span>
+            {session.vncEnabled && <span className="vnc-badge">VNC</span>}
         </div>
 
         <div className="session-info">

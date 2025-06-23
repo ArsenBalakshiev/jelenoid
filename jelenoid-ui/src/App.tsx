@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import Header from './components/header';
-import Tabs from './components/Tabs';
+import Tabs from './components/tabs';
 import MonitoringTab from './components/MonitoringTab/MonitoringTab';
 import ManualSessionTab from './components/ManualSessionTab/ManualSessionTab';
 import './App.css';
