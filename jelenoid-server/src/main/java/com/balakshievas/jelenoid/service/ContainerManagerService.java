@@ -4,8 +4,9 @@ import com.balakshievas.jelenoid.dto.ContainerInfo;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.CreateContainerResponse;
-import com.github.dockerjava.api.model.Frame;
-import com.github.dockerjava.api.model.HostConfig;
+import com.github.dockerjava.api.exception.NotModifiedException;
+import com.github.dockerjava.api.model.*;
+import jakarta.annotation.PreDestroy;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.slf4j.Logger;
@@ -53,6 +54,8 @@ public class ContainerManagerService {
     @Value("${jelenoid.video.recorder-image}")
     private String videoRecorderImage;
 
+    private ContainerInfo playwrightContainer = null;
+
     private final RestClient restClient = RestClient.builder().build();
 
     public ContainerInfo startContainer(String image, boolean isVncEnabled, boolean isVideoEnabled,
@@ -88,13 +91,11 @@ public class ContainerManagerService {
     }
 
     public String copyFileToContainer(String containerId, String base64EncodedZip) throws IOException {
-        // 1. Декодируем Base64 в байты ZIP-архива
         byte[] zipBytes = Base64.getDecoder().decode(base64EncodedZip);
 
         String fileName;
         byte[] fileContent;
 
-        // 2. Распаковываем ZIP-архив в памяти, чтобы получить имя и содержимое файла
         try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
             var zipEntry = zis.getNextEntry();
             if (zipEntry == null) {
@@ -104,7 +105,6 @@ public class ContainerManagerService {
             fileContent = zis.readAllBytes();
         }
 
-        // 3. Создаем TAR-архив в памяти, так как Docker API принимает только TAR
         ByteArrayOutputStream tarOutputStream = new ByteArrayOutputStream();
         try (TarArchiveOutputStream tos = new TarArchiveOutputStream(tarOutputStream)) {
             TarArchiveEntry tarEntry = new TarArchiveEntry(fileName);
@@ -115,7 +115,6 @@ public class ContainerManagerService {
         }
         byte[] tarBytes = tarOutputStream.toByteArray();
 
-        // 4. Копируем TAR-архив в контейнер в директорию /tmp
         dockerClient.copyArchiveToContainerCmd(containerId)
                 .withTarInputStream(new ByteArrayInputStream(tarBytes))
                 .withRemotePath("/tmp/")
@@ -170,11 +169,20 @@ public class ContainerManagerService {
     public void stopContainer(String containerId) {
         try {
             log.info("Stopping and removing container {}", containerId);
-            dockerClient.stopContainerCmd(containerId).withTimeout(containerStopTimeout).exec();
+            try {
+                dockerClient.stopContainerCmd(containerId).withTimeout(containerStopTimeout).exec();
+            } catch (NotModifiedException e) {
+                log.info("Container {} already stopped", containerId);
+            }
             dockerClient.removeContainerCmd(containerId).exec();
         } catch (Exception e) {
             log.error("Failed to stop/remove container {}", containerId, e);
         }
+    }
+
+    @PreDestroy
+    public void destroy() {
+        stopContainer(playwrightContainer.getContainerId());
     }
 
 }

@@ -83,7 +83,6 @@ public class SessionService {
 
             CompletableFuture<Map<String, Object>> future = new CompletableFuture<>();
             PendingRequest pendingRequest = new PendingRequest(requestBody, future, Instant.now(), System.currentTimeMillis());
-            //future.orTimeout(queueTimeoutSeconds, TimeUnit.SECONDS);
 
             if (activeSessionsService.offerToQueue(pendingRequest)) {
                 dispatchStatusUpdate();
