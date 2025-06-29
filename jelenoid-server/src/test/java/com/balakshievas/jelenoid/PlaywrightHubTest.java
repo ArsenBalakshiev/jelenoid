@@ -29,17 +29,105 @@ public class PlaywrightHubTest {
     @Test
     void testNavigationAndTitle() {
         // 1. Навигация на страницу
-        page.navigate("https://example.com");
+        page.navigate("http://host.docker.internal:8080/");
 
         // 2. Проверка заголовка
         String title = page.title();
-        Assertions.assertTrue(title.contains("Example Domain"),
-                "Заголовок должен содержать 'Example Domain'");
+        Assertions.assertTrue(title.contains("Welcome to nginx!"),
+                "Заголовок должен содержать 'Welcome to nginx!'");
+    }
+
+    @Test
+    void testNavigationAndTitle1() {
+        // 1. Навигация на страницу
+        page.navigate("http://host.docker.internal:8080/");
+
+        // 2. Проверка заголовка
+        String title = page.title();
+        Assertions.assertTrue(title.contains("Welcome to nginx!"),
+                "Заголовок должен содержать 'Welcome to nginx!'");
+    }
+
+    @Test
+    void testNavigationAndTitle2() {
+        // 1. Навигация на страницу
+        page.navigate("http://host.docker.internal:8080/");
+
+        // 2. Проверка заголовка
+        String title = page.title();
+        Assertions.assertTrue(title.contains("Welcome to nginx!"),
+                "Заголовок должен содержать 'Welcome to nginx!'");
+    }
+
+    @Test
+    void testNavigationAndTitle3() {
+        // 1. Навигация на страницу
+        page.navigate("http://host.docker.internal:8080/");
+
+        // 2. Проверка заголовка
+        String title = page.title();
+        Assertions.assertTrue(title.contains("Welcome to nginx!"),
+                "Заголовок должен содержать 'Welcome to nginx!'");
+    }
+
+    @Test
+    void testNavigationAndTitle4() {
+        // 1. Навигация на страницу
+        page.navigate("http://host.docker.internal:8080/");
+
+        // 2. Проверка заголовка
+        String title = page.title();
+        Assertions.assertTrue(title.contains("Welcome to nginx!"),
+                "Заголовок должен содержать 'Welcome to nginx!'");
+    }
+
+    @Test
+    void testNavigationAndTitle5() {
+        // 1. Навигация на страницу
+        page.navigate("http://host.docker.internal:8080/");
+
+        // 2. Проверка заголовка
+        String title = page.title();
+        Assertions.assertTrue(title.contains("Welcome to nginx!"),
+                "Заголовок должен содержать 'Welcome to nginx!'");
+    }
+
+    @Test
+    void testNavigationAndTitle6() {
+        // 1. Навигация на страницу
+        page.navigate("http://host.docker.internal:8080/");
+
+        // 2. Проверка заголовка
+        String title = page.title();
+        Assertions.assertTrue(title.contains("Welcome to nginx!"),
+                "Заголовок должен содержать 'Welcome to nginx!'");
+    }
+
+    @Test
+    void testNavigationAndTitle7() {
+        // 1. Навигация на страницу
+        page.navigate("http://host.docker.internal:8080/");
+
+        // 2. Проверка заголовка
+        String title = page.title();
+        Assertions.assertTrue(title.contains("Welcome to nginx!"),
+                "Заголовок должен содержать 'Welcome to nginx!'");
+    }
+
+    @Test
+    void testNavigationAndTitle8() {
+        // 1. Навигация на страницу
+        page.navigate("http://host.docker.internal:8080/");
+
+        // 2. Проверка заголовка
+        String title = page.title();
+        Assertions.assertTrue(title.contains("Welcome to nginx!"),
+                "Заголовок должен содержать 'Welcome to nginx!'");
     }
 
     @Test
     void testScreenshotFunctionality() {
-        page.navigate("https://example.com");
+        page.navigate("http://host.docker.internal:8080/");
 
         // 3. Создание скриншота
         byte[] screenshot = page.screenshot();

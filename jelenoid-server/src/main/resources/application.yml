@@ -23,7 +23,7 @@ jelenoid:
     config-dir: ${BROWSERS_FILE:}
   timeouts:
     queue: ${QUEUE_TIMEOUT:30000}
-    session: ${SESSION_TIMEOUT:60000000}
+    session: ${SESSION_TIMEOUT:600000}
     startup: ${STARTUP_TIMEOUT:30000}
     cleanup: ${CLEANUP_TIMEOUT:15000}
   executor:
@@ -34,8 +34,8 @@ jelenoid:
   playwright:
     port: ${PLAYWRIGHT_PORT:3000}
     version: ${PLAYWRIGHT_VERSION:1.53.1}
-    max_sessions: ${PLAYWRIGHT_SESSION_LIMIT:10}
-    queue_limit: ${PLAYWRIGHT_QUEUE_LIMIT:1000}
+    max_sessions: ${PLAYWRIGHT_SESSION_LIMIT:3}
+    queue_limit: ${PLAYWRIGHT_QUEUE_LIMIT:100}
 
 management:
   endpoint:

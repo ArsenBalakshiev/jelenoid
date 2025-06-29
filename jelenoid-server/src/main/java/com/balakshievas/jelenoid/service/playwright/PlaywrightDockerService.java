@@ -1,6 +1,5 @@
 package com.balakshievas.jelenoid.service.playwright;
 
-import com.balakshievas.jelenoid.config.TaskExecutorConfig;
 import com.balakshievas.jelenoid.dto.ContainerInfo;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerResponse;
@@ -9,23 +8,28 @@ import com.github.dockerjava.api.model.Capability;
 import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.Ports;
-import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Async;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Semaphore;
 
 @Service
 public class PlaywrightDockerService {
 
     private static final Logger log = LoggerFactory.getLogger(PlaywrightDockerService.class);
+
+    private final List<ContainerInfo> activeSessions = new CopyOnWriteArrayList<>();
+
+    private final Semaphore containerStartSemaphore = new Semaphore(3);
 
     @Autowired
     private DockerClient dockerClient;
@@ -48,28 +52,12 @@ public class PlaywrightDockerService {
     @Value("${jelenoid.timeouts.cleanup}")
     private int containerStopTimeout;
 
-    private final Object lock = new Object();
+    public ContainerInfo startPlaywrightContainer() {
 
-    private volatile static ContainerInfo playwrightContainer = null;
+        try {
+            containerStartSemaphore.acquire();
 
-    public String getPlaywrightAddress() {
-        synchronized (lock) {
-            if (playwrightContainer == null) {
-                startPlaywrightContainer();
-            }
-        }
-
-        playwrightContainer.updateActivity();
-        return "ws://" + playwrightContainer.getContainerName() + ":" + playwrightPort;
-    }
-
-    private ContainerInfo startPlaywrightContainer() {
-        synchronized (lock) {
-            if (playwrightContainer != null) {
-                return playwrightContainer;
-            }
-
-            String containerName = "jelenoid-playwright";
+            String containerName = "jelenoid-playwright-" + UUID.randomUUID().toString().substring(0, 8);
 
             ExposedPort tcp = ExposedPort.tcp(playwrightPort);
             Ports portBindings = new Ports();
@@ -79,7 +67,7 @@ public class PlaywrightDockerService {
                     .withInit(true)
                     .withIpcMode("host")
                     .withCapAdd(Capability.SYS_ADMIN)
-                    .withPortBindings(portBindings)
+                    //.withPortBindings(portBindings)
                     .withNetworkMode(dockerNetworkName);
 
             String[] cmd = {
@@ -101,66 +89,76 @@ public class PlaywrightDockerService {
             log.info("Container {} started. Waiting for Playwright service to become available on port {}...",
                     container.getId(), playwrightPort);
 
-            boolean isServiceReady = false;
-            long startTime = System.currentTimeMillis();
-            long timeoutMillis = 30000;
 
-            while (System.currentTimeMillis() - startTime < timeoutMillis) {
-                try (Socket socket = new Socket()) {
-                    socket.connect(new InetSocketAddress(containerName, playwrightPort), 500); // Таймаут на попытку 500мс
-                    log.info("Playwright service is ready!");
-                    isServiceReady = true;
-                    break;
-                } catch (IOException e) {
-                    try {
-                        Thread.sleep(1000); // Пауза перед следующей попыткой
-                    } catch (InterruptedException ignored) {
-                        Thread.currentThread().interrupt();
-                    }
-                }
-            }
-
-            if (!isServiceReady) {
-                log.error("Playwright service in container {} did not start within {} seconds. Stopping container.",
-                        container.getId(), timeoutMillis / 1000);
+            if (!waitForServiceReady(containerName, playwrightPort)) {
+                log.error("Playwright service in container {} did not start. Stopping container.",
+                        container.getId());
                 stopContainer(container.getId()); // Чистим за собой
                 throw new RuntimeException("Could not start Playwright service in container.");
             }
 
-            playwrightContainer = new ContainerInfo(container.getId(), containerName);
+            ContainerInfo result = new ContainerInfo(container.getId(), containerName);
 
-            try {
-                Thread.sleep(5000);
-            } catch (InterruptedException ignored) {}
+            //activeSessions.add(result);
 
-            return playwrightContainer;
+            return result;
+
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted while waiting to start a container", e);
+        } finally {
+            containerStartSemaphore.release();
+            log.debug("Container start permit released.");
         }
     }
 
-    @Scheduled(fixedRateString = "${jelenoid.timeouts.startup}")
+   /* @Scheduled(fixedRateString = "${jelenoid.timeouts.startup}")
     @Async(TaskExecutorConfig.SESSION_TASK_EXECUTOR)
     public void checkInactiveSessions() {
-        synchronized (lock) {
-            if (playwrightContainer != null && System.currentTimeMillis() - playwrightContainer.getLastActivity() > sessionTimeoutMillis) {
+        for (ContainerInfo conatiner : activeSessions) {
+            if (conatiner != null && System.currentTimeMillis() - conatiner.getLastActivity() > sessionTimeoutMillis) {
                 log.warn("Playwright {} has timed out. Releasing slot and stopping container.",
-                        playwrightContainer.getContainerId());
-                stopContainer(playwrightContainer.getContainerId());
-                playwrightContainer = null;
+                        conatiner.getContainerId());
+                stopContainer(conatiner.getContainerId());
             }
         }
     }
 
     @PreDestroy
     public void cleanup() {
-        synchronized (lock) {
-            if (playwrightContainer != null) {
-                stopContainer(playwrightContainer.getContainerId());
-                playwrightContainer = null;
+        for (ContainerInfo container : activeSessions) {
+            stopContainer(container.getContainerId());
+        }
+    }*/
+
+    private boolean waitForServiceReady(String containerDomain, Integer containerPort) {
+        boolean isServiceReady = false;
+        long startTime = System.currentTimeMillis();
+        long timeoutMillis = 60000;
+
+        while (System.currentTimeMillis() - startTime < timeoutMillis) {
+            try (Socket socket = new Socket()) {
+                socket.connect(new InetSocketAddress(containerDomain, containerPort), 500); // Таймаут на попытку 500мс
+                log.info("Playwright service is ready!");
+                isServiceReady = true;
+                break;
+            } catch (IOException e) {
+                try {
+                    Thread.sleep(1000); // Пауза перед следующей попыткой
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
             }
         }
+
+        return isServiceReady;
     }
 
-    private void stopContainer(String containerId) {
+    public void stopContainer(String containerId) {
+
+        //activeSessions.removeIf(containerInfo -> containerId.equals(containerInfo.getContainerId()));
+
         try {
             log.info("Stopping and removing container {}", containerId);
             try {
@@ -170,7 +168,9 @@ public class PlaywrightDockerService {
             }
             dockerClient.removeContainerCmd(containerId).exec();
         } catch (Exception e) {
-            log.error("Failed to stop/remove container {}", containerId, e);
+            log.error("Failed to stop/remove container {} {}", containerId, e.getMessage());
+        } finally {
+            log.debug("Container stop permit released for {}.", containerId);
         }
     }
 }
