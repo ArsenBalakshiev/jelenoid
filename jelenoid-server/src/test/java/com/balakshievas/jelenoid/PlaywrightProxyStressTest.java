@@ -14,10 +14,9 @@ public class PlaywrightProxyStressTest {
 
     private static final Logger log = LoggerFactory.getLogger(PlaywrightProxyStressTest.class);
 
-    private static final int TOTAL_SESSIONS_TO_TEST = 15;
+    private static final int TOTAL_SESSIONS_TO_TEST = 50;
     private static final String PROXY_WS_URL = "ws://localhost:4444/playwright";
 
-    // Убираем Playwright из полей класса!
     private ExecutorService executorService;
 
     @BeforeEach
@@ -45,9 +44,6 @@ public class PlaywrightProxyStressTest {
                 int taskId = taskCounter.incrementAndGet();
                 log.info("Задача {} -> Старт.", taskId);
 
-                // --- КЛЮЧЕВОЕ ИЗМЕНЕНИЕ ---
-                // Каждый поток создает свой собственный экземпляр Playwright.
-                // try-with-resources гарантирует, что он будет закрыт.
                 try (Playwright playwright = Playwright.create()) {
                     log.info("Задача {} -> Попытка подключения...", taskId);
 
@@ -75,12 +71,11 @@ public class PlaywrightProxyStressTest {
                         log.error("Задача {} -> Провалена с ошибкой: {}", taskId, e.getMessage(), e);
                         return false;
                     }
-                } // Playwright будет автоматически закрыт здесь
+                }
             };
             futures.add(executorService.submit(task));
         }
 
-        // Ожидаем завершения всех задач
         int successfulSessions = 0;
         for (Future<Boolean> future : futures) {
             try {

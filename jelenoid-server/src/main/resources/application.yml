@@ -34,7 +34,7 @@ jelenoid:
   playwright:
     port: ${PLAYWRIGHT_PORT:3000}
     version: ${PLAYWRIGHT_VERSION:1.53.1}
-    max_sessions: ${PLAYWRIGHT_SESSION_LIMIT:3}
+    max_sessions: ${PLAYWRIGHT_SESSION_LIMIT:10}
     queue_limit: ${PLAYWRIGHT_QUEUE_LIMIT:100}
 
 management:
