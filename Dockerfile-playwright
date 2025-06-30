@@ -1,8 +1,0 @@
-FROM mcr.microsoft.com/playwright:v1.53.1
-
-RUN npm install -g playwright@1.53.1
-
-RUN apt-get update && \
-    apt-get install -y tcpdump
-
-RUN playwright --version
