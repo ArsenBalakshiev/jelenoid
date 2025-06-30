@@ -1,34 +1,19 @@
 package com.balakshievas.jelenoid.service.playwright;
 
 import com.balakshievas.jelenoid.dto.ContainerInfo;
-import com.github.dockerjava.api.DockerClient;
+import com.balakshievas.jelenoid.service.AbstractDockerService;
 import com.github.dockerjava.api.command.CreateContainerResponse;
-import com.github.dockerjava.api.exception.NotModifiedException;
 import com.github.dockerjava.api.model.Capability;
 import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.HostConfig;
-import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.Socket;
-import java.util.Arrays;
 import java.util.UUID;
 
 @Service
-public class PlaywrightDockerService {
-
-    private static final Logger log = LoggerFactory.getLogger(PlaywrightDockerService.class);
-
-    @Autowired
-    private DockerClient dockerClient;
-
-    @Value("${jelenoid.docker.network:jelenoid-net}")
-    private String dockerNetworkName;
+public class PlaywrightDockerService extends AbstractDockerService {
 
     @Value("${jelenoid.playwright.default_version}")
     private String defaultPlaywrightVersion;
@@ -36,8 +21,9 @@ public class PlaywrightDockerService {
     @Value("${jelenoid.playwright.port}")
     private Integer playwrightPort;
 
-    @Value("${jelenoid.timeouts.cleanup}")
-    private int containerStopTimeout;
+    public PlaywrightDockerService() {
+        super(LoggerFactory.getLogger(PlaywrightDockerService.class));
+    }
 
     public ContainerInfo startPlaywrightContainer() {
         return startPlaywrightContainer(defaultPlaywrightVersion);
@@ -47,7 +33,7 @@ public class PlaywrightDockerService {
 
         String imageName = "mcr.microsoft.com/playwright:v" + playwrightVersion;
 
-        if(!imageExists(imageName)) {
+        if (!imageExists(imageName)) {
             throw new RuntimeException("There is no playwright image with name " + imageName);
         }
 
@@ -79,7 +65,7 @@ public class PlaywrightDockerService {
                 container.getId(), playwrightPort);
 
 
-        if (!waitForServiceReady(containerName, playwrightPort)) {
+        if (!waitForOpeningSpecificPort(containerName, playwrightPort)) {
             log.error("Playwright service in container {} did not start. Stopping container.",
                     container.getId());
             stopContainer(container.getId());
@@ -87,53 +73,5 @@ public class PlaywrightDockerService {
         }
 
         return new ContainerInfo(container.getId(), containerName);
-    }
-
-    public void stopContainer(String containerId) {
-
-        try {
-            log.info("Stopping and removing container {}", containerId);
-            try {
-                dockerClient.stopContainerCmd(containerId).withTimeout(containerStopTimeout).exec();
-            } catch (NotModifiedException e) {
-                log.info("Container {} already stopped", containerId);
-            }
-            dockerClient.removeContainerCmd(containerId).exec();
-        } catch (Exception e) {
-            log.error("Failed to stop/remove container {} {}", containerId, e.getMessage());
-        } finally {
-            log.debug("Container stop permit released for {}.", containerId);
-        }
-    }
-
-    boolean imageExists(String imageName) {
-        return dockerClient.listImagesCmd()
-                .withImageNameFilter(imageName)
-                .exec()
-                .stream()
-                .anyMatch(img -> Arrays.asList(img.getRepoTags()).contains(imageName));
-    }
-
-    private boolean waitForServiceReady(String containerDomain, Integer containerPort) {
-        boolean isServiceReady = false;
-        long startTime = System.currentTimeMillis();
-        long timeoutMillis = 60000;
-
-        while (System.currentTimeMillis() - startTime < timeoutMillis) {
-            try (Socket socket = new Socket()) {
-                socket.connect(new InetSocketAddress(containerDomain, containerPort), 500); // Таймаут на попытку 500мс
-                log.info("Playwright service is ready!");
-                isServiceReady = true;
-                break;
-            } catch (IOException e) {
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException ignored) {
-                    Thread.currentThread().interrupt();
-                }
-            }
-        }
-
-        return isServiceReady;
     }
 }

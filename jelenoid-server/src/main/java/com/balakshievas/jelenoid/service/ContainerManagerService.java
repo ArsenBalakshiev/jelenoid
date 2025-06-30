@@ -1,49 +1,21 @@
 package com.balakshievas.jelenoid.service;
 
 import com.balakshievas.jelenoid.dto.ContainerInfo;
-import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.exception.NotModifiedException;
-import com.github.dockerjava.api.model.*;
-import jakarta.annotation.PreDestroy;
-import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
-import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
-import org.slf4j.Logger;
+import com.github.dockerjava.api.model.HostConfig;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.Closeable;
-import java.io.IOException;
-import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
-import java.util.zip.ZipInputStream;
 
 @Service
-public class ContainerManagerService {
-
-    private static final Logger log = LoggerFactory.getLogger(ContainerManagerService.class);
-
-    @Autowired
-    private DockerClient dockerClient;
-
-    @Value("${jelenoid.docker.network:jelenoid-net}")
-    private String dockerNetworkName;
-
-    @Value("${jelenoid.timeouts.session}")
-    private long sessionTimeout;
-
-    @Value("${jelenoid.timeouts.cleanup}")
-    private int containerStopTimeout;
+public class ContainerManagerService extends AbstractDockerService {
 
     @Value("${jelenoid.video.dir}")
     private String videoOutputDir;
@@ -54,16 +26,18 @@ public class ContainerManagerService {
     @Value("${jelenoid.video.recorder-image}")
     private String videoRecorderImage;
 
-    private ContainerInfo playwrightContainer = null;
-
     private final RestClient restClient = RestClient.builder().build();
+
+    public ContainerManagerService() {
+        super(LoggerFactory.getLogger(ContainerManagerService.class));
+    }
 
     public ContainerInfo startContainer(String image, boolean isVncEnabled, boolean isVideoEnabled,
                                         boolean isLogEnabled, String videoName, String logName) {
 
         String hubSessionId = UUID.randomUUID().toString();
 
-        String containerName = "jelenoid-session" + hubSessionId;
+        String containerName = "jelenoid-session " + hubSessionId;
 
         HostConfig hostConfig = HostConfig.newHostConfig()
                 .withNetworkMode(dockerNetworkName)
@@ -90,54 +64,9 @@ public class ContainerManagerService {
         return new ContainerInfo(containerId, containerName);
     }
 
-    public String copyFileToContainer(String containerId, String base64EncodedZip) throws IOException {
-        byte[] zipBytes = Base64.getDecoder().decode(base64EncodedZip);
-
-        String fileName;
-        byte[] fileContent;
-
-        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
-            var zipEntry = zis.getNextEntry();
-            if (zipEntry == null) {
-                throw new IOException("Invalid ZIP archive: no entries found.");
-            }
-            fileName = Path.of(zipEntry.getName()).getFileName().toString();
-            fileContent = zis.readAllBytes();
-        }
-
-        ByteArrayOutputStream tarOutputStream = new ByteArrayOutputStream();
-        try (TarArchiveOutputStream tos = new TarArchiveOutputStream(tarOutputStream)) {
-            TarArchiveEntry tarEntry = new TarArchiveEntry(fileName);
-            tarEntry.setSize(fileContent.length);
-            tos.putArchiveEntry(tarEntry);
-            tos.write(fileContent);
-            tos.closeArchiveEntry();
-        }
-        byte[] tarBytes = tarOutputStream.toByteArray();
-
-        dockerClient.copyArchiveToContainerCmd(containerId)
-                .withTarInputStream(new ByteArrayInputStream(tarBytes))
-                .withRemotePath("/tmp/")
-                .exec();
-
-        String filePathInContainer = "/tmp/" + fileName;
-        log.info("File {} successfully uploaded to container {} at path {}", fileName, containerId, filePathInContainer);
-
-        return filePathInContainer;
-    }
-
-    public Closeable streamContainerLogs(String containerId, ResultCallback<Frame> callback) {
-        return dockerClient.logContainerCmd(containerId)
-                .withStdOut(true)
-                .withStdErr(true)
-                .withTailAll()
-                .withFollowStream(true)
-                .exec(callback);
-    }
-
     private void waitForContainerToBeReady(String containerIpAddress) {
         String statusUrl = "http://" + containerIpAddress + ":4444/status";
-        long timeout = System.currentTimeMillis() + sessionTimeout;
+        long timeout = System.currentTimeMillis() + containerStartTimeout;
 
         log.info("Waiting for container {} to be ready at {}...", containerIpAddress, statusUrl);
 
@@ -165,24 +94,4 @@ public class ContainerManagerService {
 
         throw new IllegalStateException("Container " + containerIpAddress + " did not become ready in time.");
     }
-
-    public void stopContainer(String containerId) {
-        try {
-            log.info("Stopping and removing container {}", containerId);
-            try {
-                dockerClient.stopContainerCmd(containerId).withTimeout(containerStopTimeout).exec();
-            } catch (NotModifiedException e) {
-                log.info("Container {} already stopped", containerId);
-            }
-            dockerClient.removeContainerCmd(containerId).exec();
-        } catch (Exception e) {
-            log.error("Failed to stop/remove container {}", containerId, e);
-        }
-    }
-
-    @PreDestroy
-    public void destroy() {
-        stopContainer(playwrightContainer.getContainerId());
-    }
-
 }
