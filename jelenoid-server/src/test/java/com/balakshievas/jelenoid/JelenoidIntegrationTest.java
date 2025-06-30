@@ -65,7 +65,7 @@ class JelenoidIntegrationTest {
 
         DesiredCapabilities capabilities = new DesiredCapabilities();
         capabilities.setBrowserName("chrome");
-        capabilities.setVersion("133"); // Убедитесь, что версия верна
+        capabilities.setVersion("133");
         capabilities.setCapability(ChromeOptions.CAPABILITY, chromeOptions);
 
         WebDriver driver = null;

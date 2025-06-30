@@ -20,17 +20,23 @@ jelenoid:
   docker:
     network: ${DOCKER_NETWORK:jelenoid-net}
   browsers:
-    config-dir: ${BROWSERS_FILE:}
+    config-dir: ${BROWSERS_FILE}
   timeouts:
     queue: ${QUEUE_TIMEOUT:30000}
-    session: ${SESSION_TIMEOUT:60000}
+    session: ${SESSION_TIMEOUT:600000}
     startup: ${STARTUP_TIMEOUT:30000}
     cleanup: ${CLEANUP_TIMEOUT:15000}
+    starting_timeout: ${CONTAINER_STARTING_TIMEOUT:60000}
   executor:
     core-pool-size: ${EXECUTOR_POOL_SIZE:5}
     max-pool-size: ${EXECXUTOR_MAX_POOL_SIZE:10}
     queue-capacity: ${EXECUTOR_QUEUE_CAPACITY:100}
   ui_hosts: ${UI_HOSTS_LIST:http://localhost:3000,http://localhost:4444}
+  playwright:
+    port: ${PLAYWRIGHT_PORT:3000}
+    default_version: ${PLAYWRIGHT_DEFAULT_VERSION:1.53.1}
+    max_sessions: ${PLAYWRIGHT_SESSION_LIMIT:10}
+    queue_limit: ${PLAYWRIGHT_QUEUE_LIMIT:100}
 
 management:
   endpoint:
