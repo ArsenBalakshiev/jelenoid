@@ -2,7 +2,7 @@ package com.balakshievas.jelenoid.websocket.playwright; // Замените на
 
 import com.balakshievas.jelenoid.config.TaskExecutorConfig;
 import com.balakshievas.jelenoid.dto.ContainerInfo;
-import com.balakshievas.jelenoid.service.playwright.PlaywrightDockerService; // Замените на ваш сервис
+import com.balakshievas.jelenoid.service.playwright.PlaywrightDockerService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.java_websocket.client.WebSocketClient;
@@ -19,7 +19,6 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
@@ -43,7 +42,6 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
     @Value("${jelenoid.timeouts.session}")
     private long sessionTimeoutMillis;
 
-
     private Semaphore semaphore;
     private BlockingQueue<SessionPair> waitingQueue;
     private final ConcurrentHashMap<WebSocketSession, SessionPair> activeSessions = new ConcurrentHashMap<>();
@@ -59,9 +57,6 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
         log.info("ProxyWebSocketHandler initialized with max_sessions={} and queue_limit={}", maxSessions, queueLimit);
     }
 
-    /**
-     * Внутренний класс для хранения состояния каждой прокси-сессии.
-     */
     static class SessionPair {
         final WebSocketSession clientSession;
         volatile WebSocketClient containerClient;
@@ -69,7 +64,6 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
         volatile boolean connectionToContainerEstablished = false;
         final Queue<WebSocketMessage<?>> pendingMessages = new ConcurrentLinkedQueue<>();
         ContainerInfo container; // Храним информацию о привязанном контейнере
-        volatile boolean ready = false;
 
         SessionPair(WebSocketSession clientSession) {
             this.clientSession = clientSession;
@@ -100,7 +94,14 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
     private void startProxyForSession(WebSocketSession session, SessionPair pair) {
         proxyExecutor.submit(() -> {
             try {
-                pair.container = playwrightDockerService.startPlaywrightContainer();
+
+                String playwrightContainerVersion = getPlaywrightVersion(session);
+
+                if (playwrightContainerVersion != null) {
+                    pair.container = playwrightDockerService.startPlaywrightContainer(playwrightContainerVersion);
+                } else {
+                    pair.container = playwrightDockerService.startPlaywrightContainer();
+                }
                 if (pair.container == null) {
                     throw new RuntimeException("Failed to start a new Playwright container.");
                 }
@@ -117,7 +118,6 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
                 }
             } catch (Exception e) {
                 log.error("Session {}: Failed to start proxy task.", session.getId(), e);
-                // Если не удалось запустить контейнер, нужно освободить слот
                 activeSessions.remove(session);
                 semaphore.release();
                 closeSessionSilently(session, CloseStatus.SERVER_ERROR);
@@ -125,8 +125,7 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
         });
     }
 
-    private WebSocketClient createContainerClient(SessionPair pair) throws URISyntaxException {
-        // Адрес теперь берется из информации о контейнере
+    private WebSocketClient createContainerClient(SessionPair pair) {
         URI containerUri = URI.create("ws://" + pair.container.getContainerName() + ":" + playwrightPort);
 
         Map<String, String> headersToForward = new HashMap<>();
@@ -154,10 +153,17 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
                     }
                 }
             }
+
             @Override
-            public void onMessage(String message) { sendToClient(pair, new TextMessage(message)); }
+            public void onMessage(String message) {
+                sendToClient(pair, new TextMessage(message));
+            }
+
             @Override
-            public void onMessage(ByteBuffer bytes) { sendToClient(pair, new BinaryMessage(bytes)); }
+            public void onMessage(ByteBuffer bytes) {
+                sendToClient(pair, new BinaryMessage(bytes));
+            }
+
             @Override
             public void onClose(int code, String reason, boolean remote) {
                 log.warn("Session {}: Container connection closed. Code: {}, Reason: {}", pair.clientSession.getId(), code, reason);
@@ -167,6 +173,7 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
                     pair.container = null;
                 });
             }
+
             @Override
             public void onError(Exception ex) {
                 log.error("Session {}: Error in container connection.", pair.clientSession.getId(), ex);
@@ -179,12 +186,10 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         log.info("Session {}: Client connection closed with status {}.", session.getId(), status.getCode());
 
-        // Удаляем сессию из активных и получаем ее данные
         SessionPair removedPair = activeSessions.remove(session);
         if (removedPair != null) {
             if (removedPair.container != null) {
                 log.info("Session {}: Cleaning up dedicated container {}.", session.getId(), removedPair.container.getContainerId());
-                // Запускаем остановку в отдельном потоке, чтобы не блокировать текущий
                 proxyExecutor.submit(() -> {
                     playwrightDockerService.stopContainer(removedPair.container.getContainerId());
                     removedPair.container = null;
@@ -211,10 +216,17 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         processWebSocketMessage(session, message);
     }
+
     @Override
     protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) {
         processWebSocketMessage(session, message);
     }
+
+    private String getPlaywrightVersion(WebSocketSession session) {
+        return (String) session.getAttributes()
+                .get("playwrightVersion");
+    }
+
     private void processWebSocketMessage(WebSocketSession session, WebSocketMessage<?> message) {
         SessionPair pair = activeSessions.get(session);
         if (pair == null) return;
@@ -224,14 +236,14 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
             }
             if (pair.connectionToContainerEstablished) {
                 if (message instanceof TextMessage) pair.containerClient.send(((TextMessage) message).getPayload());
-                else if (message instanceof BinaryMessage) pair.containerClient.send(((BinaryMessage) message).getPayload());
+                else if (message instanceof BinaryMessage)
+                    pair.containerClient.send(((BinaryMessage) message).getPayload());
             } else {
                 pair.pendingMessages.add(message);
             }
         }
     }
 
-    // sendToClient и closeSessionSilently без изменений
     private void sendToClient(SessionPair pair, WebSocketMessage<?> message) {
         try {
             if (pair.clientSession.isOpen()) {
@@ -244,13 +256,15 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
             closeSessionSilently(pair.clientSession, CloseStatus.SERVER_ERROR);
         }
     }
+
     private void closeSessionSilently(WebSocketSession session, CloseStatus status) {
         try {
             if (session.isOpen()) {
                 session.close(status);
             }
 
-        } catch (IOException ignored) {}
+        } catch (IOException ignored) {
+        }
     }
 
     @Scheduled(fixedRateString = "${jelenoid.timeouts.startup}")
@@ -269,7 +283,6 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
     public void shutdown() {
         log.info("Shutting down ProxyWebSocketHandler...");
         proxyExecutor.shutdownNow();
-        // Очищаем оставшиеся активные сессии и их контейнеры
         activeSessions.values().forEach(pair -> {
             closeSessionSilently(pair.clientSession, CloseStatus.GOING_AWAY);
             if (pair.container != null) {

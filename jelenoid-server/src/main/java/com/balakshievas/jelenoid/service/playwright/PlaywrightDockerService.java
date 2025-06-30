@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.util.Arrays;
 import java.util.UUID;
 
 @Service
@@ -29,8 +30,8 @@ public class PlaywrightDockerService {
     @Value("${jelenoid.docker.network:jelenoid-net}")
     private String dockerNetworkName;
 
-    @Value("${jelenoid.playwright.version}")
-    private String playwrightVersion;
+    @Value("${jelenoid.playwright.default_version}")
+    private String defaultPlaywrightVersion;
 
     @Value("${jelenoid.playwright.port}")
     private Integer playwrightPort;
@@ -39,6 +40,16 @@ public class PlaywrightDockerService {
     private int containerStopTimeout;
 
     public ContainerInfo startPlaywrightContainer() {
+        return startPlaywrightContainer(defaultPlaywrightVersion);
+    }
+
+    public ContainerInfo startPlaywrightContainer(String playwrightVersion) {
+
+        String imageName = "mcr.microsoft.com/playwright:v" + playwrightVersion;
+
+        if(!imageExists(imageName)) {
+            throw new RuntimeException("There is no playwright image with name " + imageName);
+        }
 
         String containerName = "jelenoid-playwright-" + UUID.randomUUID().toString().substring(0, 8);
 
@@ -56,7 +67,7 @@ public class PlaywrightDockerService {
         };
 
         CreateContainerResponse container = dockerClient
-                .createContainerCmd("mcr.microsoft.com/playwright:v" + playwrightVersion)
+                .createContainerCmd(imageName)
                 .withName(containerName)
                 .withHostConfig(hostConfig)
                 .withCmd(cmd)
@@ -78,6 +89,30 @@ public class PlaywrightDockerService {
         return new ContainerInfo(container.getId(), containerName);
     }
 
+    public void stopContainer(String containerId) {
+
+        try {
+            log.info("Stopping and removing container {}", containerId);
+            try {
+                dockerClient.stopContainerCmd(containerId).withTimeout(containerStopTimeout).exec();
+            } catch (NotModifiedException e) {
+                log.info("Container {} already stopped", containerId);
+            }
+            dockerClient.removeContainerCmd(containerId).exec();
+        } catch (Exception e) {
+            log.error("Failed to stop/remove container {} {}", containerId, e.getMessage());
+        } finally {
+            log.debug("Container stop permit released for {}.", containerId);
+        }
+    }
+
+    boolean imageExists(String imageName) {
+        return dockerClient.listImagesCmd()
+                .withImageNameFilter(imageName)
+                .exec()
+                .stream()
+                .anyMatch(img -> Arrays.asList(img.getRepoTags()).contains(imageName));
+    }
 
     private boolean waitForServiceReady(String containerDomain, Integer containerPort) {
         boolean isServiceReady = false;
@@ -100,22 +135,5 @@ public class PlaywrightDockerService {
         }
 
         return isServiceReady;
-    }
-
-    public void stopContainer(String containerId) {
-
-        try {
-            log.info("Stopping and removing container {}", containerId);
-            try {
-                dockerClient.stopContainerCmd(containerId).withTimeout(containerStopTimeout).exec();
-            } catch (NotModifiedException e) {
-                log.info("Container {} already stopped", containerId);
-            }
-            dockerClient.removeContainerCmd(containerId).exec();
-        } catch (Exception e) {
-            log.error("Failed to stop/remove container {} {}", containerId, e.getMessage());
-        } finally {
-            log.debug("Container stop permit released for {}.", containerId);
-        }
     }
 }

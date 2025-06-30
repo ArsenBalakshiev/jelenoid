@@ -14,12 +14,16 @@ public class WebSocketConfig implements WebSocketConfigurer {
     @Autowired
     private ProxyWebSocketHandler proxyWebSocketHandler;
 
+    private final PlaywrightVersionInterceptor playwrightVersionInterceptor = new PlaywrightVersionInterceptor();
+
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(
-                proxyWebSocketHandler,
-                "/playwright"
-        ).setAllowedOrigins("*");
+                        proxyWebSocketHandler,
+                        "/playwright",
+                        "/playwright-{ver:[0-9\\.]+}"
+                ).addInterceptors(playwrightVersionInterceptor)
+                .setAllowedOrigins("*");
     }
 }
