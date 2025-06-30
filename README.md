@@ -59,3 +59,9 @@ Jelenoid уже является мощным инструментом, но д�
 
 ### **Конфигурация**
 Настройте ваш `src/main/resources/application.yml`:
+
+docker-compose up -d --build --force-recreate jelenoid-server 
+
+docker build -t jelenoid-server:latest .\jelenoid-server\   
+
+docker build -t jelenoid-ui:latest .\jelenoid-ui\.    

@@ -37,7 +37,7 @@ public class ContainerManagerService extends AbstractDockerService {
 
         String hubSessionId = UUID.randomUUID().toString();
 
-        String containerName = "jelenoid-session " + hubSessionId;
+        String containerName = "jelenoid-session-" + hubSessionId;
 
         HostConfig hostConfig = HostConfig.newHostConfig()
                 .withNetworkMode(dockerNetworkName)

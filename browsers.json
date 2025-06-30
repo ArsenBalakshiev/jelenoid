@@ -1,0 +1,10 @@
+ {
+  "chrome": {
+    "default": "133",
+    "versions": {
+      "133": {
+        "image": "twilio/selenoid:chrome_stable_133"
+      }
+    }
+  }
+}

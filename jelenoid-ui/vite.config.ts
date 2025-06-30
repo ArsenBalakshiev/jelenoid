@@ -1,13 +1,14 @@
 import {defineConfig, loadEnv} from 'vite';           // импортируем loadEnv для работы с .env[1]
 import react from '@vitejs/plugin-react-swc';
 import topLevelAwait from 'vite-plugin-top-level-await';
+import {viteEnvs} from "vite-envs";
 
 export default defineConfig(({mode}) => {
 
   const env = loadEnv(mode, process.cwd());
 
   return {
-    plugins: [react(), topLevelAwait()],
+    plugins: [react(), topLevelAwait(), viteEnvs()],
     server: {
       port: 3000,
       proxy: {

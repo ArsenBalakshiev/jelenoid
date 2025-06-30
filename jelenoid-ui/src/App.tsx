@@ -20,7 +20,9 @@ const App: React.FC = () => {
 
     // SSE подписка (примерно как в Header)
     useEffect(() => {
-        const es = new EventSource('/events');
+        const es = new EventSource(
+            `${import.meta.env.VITE_SERVER_BASE_URL.replace(/\/$/, '')}/events`
+        );
         es.addEventListener('state-update', (event) => {
             try {
                 const data = JSON.parse((event as MessageEvent).data);

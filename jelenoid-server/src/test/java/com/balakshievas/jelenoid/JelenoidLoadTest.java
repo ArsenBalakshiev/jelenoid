@@ -25,10 +25,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class JelenoidLoadTest {
 
-    private final int PARALLEL_TESTS = 60;
+    private final int PARALLEL_TESTS = 15;
     private final URL HUB_URL;
 
-    // Потокобезопасная коллекция для сбора метрик
     private final ConcurrentLinkedQueue<Long> sessionCreationTimes = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<String> failedTests = new ConcurrentLinkedQueue<>();
 

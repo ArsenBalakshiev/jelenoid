@@ -18,7 +18,9 @@ const Header: React.FC = () => {
     useEffect(() => {
         // Устанавливаем начальный статус при создании компонента
         setConnectionStatus('connecting');
-        const eventSource = new EventSource('/events');
+        const eventSource = new EventSource(
+            `${import.meta.env.VITE_SERVER_BASE_URL.replace(/\/$/, '')}/events`
+        );
 
         // Срабатывает только при успешном установлении соединения
         eventSource.onopen = () => {

@@ -44,7 +44,7 @@ public class BrowserManagerService {
             resourcePath = "classpath:browsers.json";
             log.info("Свойство 'jelenoid.browsers.config-dir' не установлено. Используется файл по умолчанию: {}", resourcePath);
         } else {
-            resourcePath = "file:" + configPath.replace("\\", "/") + "/browsers.json";
+            resourcePath = "file:" + configPath.replace("\\", "/");
             log.info("Загрузка конфигурации браузеров из указанной директории: {}", resourcePath);
         }
 

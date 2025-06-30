@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  jelenoid-server:
+    image: jelenoid-server:latest
+    container_name: jelenoid-server
+    ports:
+      - "4444:4444"
+      - "5005:5005"
+    volumes:
+      - "./browsers.json:/app/browsers.json:ro"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    environment:
+      - PARALLEL_SESSIONS=10
+      - QUEUE_LIMIT=100
+      - DOCKER_NETWORK=jelenoid-net
+      - BROWSERS_FILE=/app/browsers.json
+      - QUEUE_TIMEOUT=30000
+      - SESSION_TIMEOUT=600000
+      - STARTUP_TIMEOUT=30000
+      - CLEANUP_TIMEOUT=15000
+      - CONTAINER_STARTING_TIMEOUT=60000
+      - EXECUTOR_POOL_SIZE=5
+      - EXECUTOR_MAX_POOL_SIZE=10
+      - EXECUTOR_QUEUE_CAPACITY=100
+      - UI_HOSTS_LIST=http://localhost:80,http://localhost
+      - PLAYWRIGHT_PORT=3000
+      - PLAYWRIGHT_DEFAULT_VERSION=1.53.1
+      - PLAYWRIGHT_SESSION_LIMIT=10
+      - PLAYWRIGHT_QUEUE_LIMIT=100
+    networks:
+      - jelenoid-net
+  jelenoid-ui:
+    image: jelenoid-ui:latest
+    container_name: jelenoid-ui
+    environment:
+      - VITE_SERVER_BASE_URL=http://localhost:4444
+      - PORT=80
+    ports:
+      - "80:80"
+    networks:
+      - jelenoid-net
+    depends_on:
+      - jelenoid-server
+
+networks:
+  jelenoid-net:
+    name: jelenoid-net
+    driver: bridge
