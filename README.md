@@ -1,4 +1,8 @@
-# Jelenoid: Мощный и легковесный Selenium хаб на Java/Spring
+[English](./README.md) | [Русский](./README_ru.md)
+
+---
+
+# Jelenoid: Powerful and Lightweight Selenium Hub on Java/Spring
 
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
@@ -6,80 +10,79 @@
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.0-brightgreen)
 ![Docker](https://img.shields.io/badge/Docker-Supported-blue)
 
-**Jelenoid** — это высокопроизводительный, легковесный и полностью настраиваемый Selenium-хаб, написанный на Java/Spring. Он предоставляет нативную поддержку **Selenium** и **Playwright**, позволяя запускать UI-тесты в изолированных Docker-контейнерах через единый API.
+**Jelenoid** is a high-performance, lightweight, and fully customizable Selenium hub written in Java/Spring. It provides native support for both **Selenium** and **Playwright**, allowing you to run UI tests in isolated Docker containers through a single API.
 
-В отличие от простых прокси, Jelenoid выступает в роли полноценного оркестратора, динамически управляя жизненным циклом браузерных сессий, обеспечивая чистоту окружения и надежность для каждого тестового запуска.
+Unlike simple proxies, Jelenoid acts as a full-fledged orchestrator, dynamically managing the lifecycle of browser sessions to ensure a clean and reliable environment for every test run.
 
 ---
 
-## 🚀 Ключевые возможности
+## 🚀 Key Features
 
-### 🌐 Общая функциональность
-- **Динамическое управление контейнерами:** Автоматический запуск и остановка Docker-контейнеров для каждой сессии.
-- **Полная изоляция тестов:** Чистая среда для каждого запуска.
-- **Ограничение ресурсов:** Установка лимитов на количество параллельных сессий и версий браузеров.
-- **Очередь запросов:** Интегрированный механизм очередей для управления нагрузкой, что критически важно для CI/CD.
+### 🌐 General Functionality
+- **Dynamic Container Management:** Automatically starts and stops Docker containers for each session.
+- **Full Test Isolation:** Provides a clean environment for every test run.
+- **Resource Limiting:** Sets limits on the number of parallel sessions and browser versions.
+- **Request Queue:** Features an integrated queuing mechanism to manage load, which is critical for CI/CD pipelines.
 
 ### 🤖 Selenium
-- **Полное проксирование W3C WebDriver:** Надежная передача всех команд протокола.
-- **Централизованное управление состоянием:** Единый сервис (`ActiveSessionsService`) для отслеживания всех активных сессий.
-- **Гибкая конфигурация:** Полная поддержка `alwaysMatch` / `firstMatch` и вендорных опций (`selenoid:options`).
-- **Загрузка файлов:** Простая загрузка файлов в контейнер во время теста через эндпоинт `/session/{sessionId}/file`.
-- **Live VNC Streaming:** Интерактивный доступ к рабочему столу браузера в реальном времени через любой noVNC-клиент.
-- **Chrome DevTools Protocol (CDP) Proxy:** Прямой доступ к DevTools браузера для эмуляции сети и других отладочных задач.
-- **Jelenoid UI:** Простой и удобный веб-интерфейс для мониторинга сессий и просмотра VNC.
+- **Full W3C WebDriver Proxying:** Reliably forwards all commands of the protocol.
+- **Centralized State Management:** A single service (`ActiveSessionsService`) tracks all active sessions.
+- **Flexible Configuration:** Full support for `alwaysMatch` / `firstMatch` and vendor-specific options (`selenoid:options`).
+- **File Uploads:** Easily upload files to the container during a test via the `/session/{sessionId}/file` endpoint.
+- **Live VNC Streaming:** Interactive, real-time access to the browser's desktop via any noVNC client.
+- **Chrome DevTools Protocol (CDP) Proxy:** Direct access to the browser's DevTools for network emulation and other debugging tasks.
+- **Jelenoid UI:** A simple and convenient web interface for monitoring sessions and viewing VNC streams.
 
 ### 🎭 Playwright
-- **Нативная поддержка:** Полноценная интеграция для запуска тестов Playwright.
-- **Проксирование команд:** Надежная передача команд от теста к браузеру.
-- **Управление сессиями:** Динамическое создание и управление сессиями в контейнерах.
+- **Native Support:** Full integration for running Playwright tests.
+- **Command Proxying:** Reliably forwards commands from the test to the browser.
+- **Session Management:** Dynamically creates and manages sessions in containers.
 
 ---
 
-## ⚙️ Конфигурация (Environment-переменные)
+## ⚙️ Configuration (Environment Variables)
 
-Приложение настраивается с помощью переменных окружения.
+The application is configured using environment variables.
 
-| Переменная                 | Описание                                                               | Значение по умолчанию |
-| -------------------------- | ---------------------------------------------------------------------- | --------------------- |
-| `PARALLEL_SESSIONS`        | Количество параллельных сессий для Selenium тестов.                      | `10`                  |
-| `QUEUE_LIMIT`              | Лимит очереди для Selenium сессий.                                     | `100`                 |
-| `DOCKER_NETWORK`           | Docker-сеть для контейнеров.                                           | `jelenoid-net`        |
-| `BROWSERS_FILE`            | Путь к файлу `browsers.json` для настройки образов.                     | (внутренний файл)     |
-| `QUEUE_TIMEOUT`            | Таймаут ожидания в очереди Selenium (мс).                               | `30000`               |
-| `SESSION_TIMEOUT`          | Таймаут неактивности сессии Selenium/Playwright (мс).                   | `600000`              |
-| `STARTUP_TIMEOUT`          | Таймаут для job'ы, отслеживающей зависшие сессии (мс).                  | `30000`               |
-| `CLEANUP_TIMEOUT`          | Таймаут на удаление контейнера (мс).                                     | `15000`               |
-| `CONTAINER_STARTING_TIMEOUT` | Таймаут на запуск контейнера (мс).                                       | `60000`               |
-| `UI_HOSTS_LIST`            | Список хостов UI для CORS (через запятую).                              | `http://localhost:80,http://localhost` |
-| `PLAYWRIGHT_PORT`          | Порт внутри контейнера Playwright.                                     | `3000`                |
-| `PLAYWRIGHT_DEFAULT_VERSION`| **(Обязательно)** Версия Playwright по умолчанию.                      | (нет)                 |
-| `PLAYWRIGHT_SESSION_LIMIT` | Количество параллельных сессий для Playwright тестов.                   | `10`                  |
-| `PLAYWRIGHT_QUEUE_LIMIT`   | Лимит очереди для Playwright сессий.                                   | `100`                 |
-
+| Variable                   | Description                                                      | Default Value                          |
+| -------------------------- | ---------------------------------------------------------------- | -------------------------------------- |
+| `PARALLEL_SESSIONS`        | The number of parallel sessions for Selenium tests.              | `10`                                   |
+| `QUEUE_LIMIT`              | The queue limit for Selenium sessions.                           | `100`                                  |
+| `DOCKER_NETWORK`           | The Docker network for containers.                               | `jelenoid-net`                         |
+| `BROWSERS_FILE`            | The path to the `browsers.json` file for image configuration.     | (internal file)                        |
+| `QUEUE_TIMEOUT`            | The timeout for the Selenium queue (in ms).                      | `30000`                                |
+| `SESSION_TIMEOUT`          | The inactivity timeout for a Selenium/Playwright session (in ms).| `600000`                               |
+| `STARTUP_TIMEOUT`          | The timeout for the job that tracks hanging sessions (in ms).    | `30000`                                |
+| `CLEANUP_TIMEOUT`          | The timeout for container removal (in ms).                       | `15000`                                |
+| `CONTAINER_STARTING_TIMEOUT` | The timeout for container startup (in ms).                       | `60000`                                |
+| `UI_HOSTS_LIST`            | A comma-separated list of UI hosts for CORS.                     | `http://localhost:80,http://localhost` |
+| `PLAYWRIGHT_PORT`          | The port inside the Playwright container.                        | `3000`                                 |
+| `PLAYWRIGHT_DEFAULT_VERSION`| **(Required)** The default version of Playwright.                | (none)                                 |
+| `PLAYWRIGHT_SESSION_LIMIT` | The number of parallel sessions for Playwright tests.            | `10`                                   |
+| `PLAYWRIGHT_QUEUE_LIMIT`   | The queue limit for Playwright sessions.                         | `100`                                  |
 
 ---
 
-## 🛠️ Использование и команды
+## 🛠️ Usage and Commands
 
-### Запуск в режиме разработки
-Для запуска сервера в Docker (с hot-reload для разработки):
+### Running in Development Mode
+To run the server in Docker (with hot-reload for development):
 ```shell
 docker-compose up -d --build --force-recreate jelenoid-server
 ```
 
-Запуск ui:
+To run the UI:
 ```shell
 npm run dev --prefix jelenoid-ui
 ```
 
-### Сборка образов
-Сборка образа сервера:
+### Building Images
+To build the server image:
 ```shell
 docker build -t jelenoid-server:latest .\jelenoid-server\
 ```
 
-Сборка образа UI:
+To build the UI image:
 ```shell
 docker build -t jelenoid-ui:latest .\jelenoid-ui\.
 ```
