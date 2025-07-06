@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   jelenoid-server:
-    image: jelenoid-server:latest
+    image: suomessa/jelenoid:server-latest
     container_name: jelenoid-server
     ports:
       - "4444:4444"
@@ -31,7 +31,7 @@ services:
     networks:
       - jelenoid-net
   jelenoid-ui:
-    image: jelenoid-ui:latest
+    image: suomessa/jelenoid:ui-latest
     container_name: jelenoid-ui
     environment:
       - VITE_SERVER_BASE_URL=http://localhost:4444

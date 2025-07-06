@@ -80,12 +80,12 @@ npm run dev --prefix jelenoid-ui
 ### Building Images
 To build the server image:
 ```shell
-docker build -t jelenoid-server:latest .\jelenoid-server\
+docker build -t suomessa/jelenoid:server-latest .\jelenoid-server\
 ```
 
 To build the UI image:
 ```shell
-docker build -t jelenoid-ui:latest .\jelenoid-ui\.
+docker build -t suomessa/jelenoid:ui-latest .\jelenoid-ui\.
 ```
 
 Demo nginx for tests:

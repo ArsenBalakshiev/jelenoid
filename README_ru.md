@@ -81,12 +81,12 @@ npm run dev --prefix jelenoid-ui
 ### Сборка образов
 Сборка образа сервера:
 ```shell
-docker build -t jelenoid-server:latest .\jelenoid-server\
+docker build -t suomessa/jelenoid:server-latest .\jelenoid-server\
 ```
 
 Сборка образа UI:
 ```shell
-docker build -t jelenoid-ui:latest .\jelenoid-ui\.
+docker build -t suomessa/jelenoid:ui-latest .\jelenoid-ui\.
 ```
 
 Demo nginx для тестов:
