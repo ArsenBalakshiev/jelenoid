@@ -86,3 +86,8 @@ To build the UI image:
 ```shell
 docker build -t jelenoid-ui:latest .\jelenoid-ui\.
 ```
+
+Demo nginx for tests:
+```shell
+docker run -d --name mynginx -p 8080:80 nginx
+```

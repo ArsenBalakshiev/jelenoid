@@ -16,7 +16,6 @@ public class EmitterService {
     private static final Logger log = LoggerFactory.getLogger(EmitterService.class);
     private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
 
-    // Метод для добавления нового подписчика (UI)
     public void addEmitter(SseEmitter emitter) {
         emitter.onCompletion(() -> {
             log.info("Emitter completed, removing from list.");
@@ -33,9 +32,7 @@ public class EmitterService {
         this.emitters.add(emitter);
     }
 
-    // Метод для отправки события всем подписчикам
     public void dispatch(Object event) {
-        // Список для сбора эмиттеров, которые нужно удалить
         List<SseEmitter> deadEmitters = new ArrayList<>();
 
         for (SseEmitter emitter : emitters) {
@@ -45,13 +42,11 @@ public class EmitterService {
                         .data(event);
                 emitter.send(eventBuilder);
             } catch (IOException e) {
-                // Не удаляем сразу, а добавляем в список на удаление
-                log.warn("Failed to send event to an emitter. Marking for removal.", e);
+                log.warn("Failed to send event to an emitter. Marking for removal.");
                 deadEmitters.add(emitter);
             }
         }
 
-        // Удаляем все "мертвые" эмиттеры из основного списка одним вызовом
         if (!deadEmitters.isEmpty()) {
             emitters.removeAll(deadEmitters);
             log.info("Removed {} dead emitters.", deadEmitters.size());

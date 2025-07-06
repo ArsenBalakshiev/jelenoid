@@ -20,7 +20,7 @@ jelenoid:
   docker:
     network: ${DOCKER_NETWORK:jelenoid-net}
   browsers:
-    config-dir: ${BROWSERS_FILE}
+    config-dir: ${BROWSERS_FILE:}
   timeouts:
     queue: ${QUEUE_TIMEOUT:30000}
     session: ${SESSION_TIMEOUT:600000}

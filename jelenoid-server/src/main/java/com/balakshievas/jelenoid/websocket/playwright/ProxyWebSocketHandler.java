@@ -1,9 +1,10 @@
-package com.balakshievas.jelenoid.websocket.playwright; // Замените на ваш пакет
+package com.balakshievas.jelenoid.websocket.playwright;
 
 import com.balakshievas.jelenoid.config.TaskExecutorConfig;
-import com.balakshievas.jelenoid.dto.ContainerInfo;
+import com.balakshievas.jelenoid.dto.SessionPair;
+import com.balakshievas.jelenoid.dto.StatusChangedEvent;
+import com.balakshievas.jelenoid.service.ActiveSessionsService;
 import com.balakshievas.jelenoid.service.playwright.PlaywrightDockerService;
-import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
@@ -11,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -22,19 +24,14 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Queue;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 @Component
 public class ProxyWebSocketHandler extends TextWebSocketHandler {
 
     private final Logger log = LoggerFactory.getLogger(ProxyWebSocketHandler.class);
-
-    @Value("${jelenoid.playwright.max_sessions:10}")
-    private int maxSessions;
-
-    @Value("${jelenoid.playwright.queue_limit:100}")
-    private int queueLimit;
 
     @Value("${jelenoid.playwright.port}")
     private Integer playwrightPort;
@@ -42,46 +39,32 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
     @Value("${jelenoid.timeouts.session}")
     private long sessionTimeoutMillis;
 
-    private Semaphore semaphore;
-    private BlockingQueue<SessionPair> waitingQueue;
-    private final ConcurrentHashMap<WebSocketSession, SessionPair> activeSessions = new ConcurrentHashMap<>();
+    @Value("${jelenoid.playwright.default_version}")
+    private String defaultPlaywrightVersion;
+
     private final ExecutorService proxyExecutor = Executors.newCachedThreadPool();
+
+    @Autowired
+    private ActiveSessionsService activeSessionsService;
 
     @Autowired
     private PlaywrightDockerService playwrightDockerService;
 
-    @PostConstruct
-    public void init() {
-        this.semaphore = new Semaphore(maxSessions, true);
-        this.waitingQueue = new LinkedBlockingQueue<>(queueLimit);
-        log.info("ProxyWebSocketHandler initialized with max_sessions={} and queue_limit={}", maxSessions, queueLimit);
-    }
-
-    static class SessionPair {
-        final WebSocketSession clientSession;
-        volatile WebSocketClient containerClient;
-        final Object lock = new Object();
-        volatile boolean connectionToContainerEstablished = false;
-        final Queue<WebSocketMessage<?>> pendingMessages = new ConcurrentLinkedQueue<>();
-        ContainerInfo container; // Храним информацию о привязанном контейнере
-
-        SessionPair(WebSocketSession clientSession) {
-            this.clientSession = clientSession;
-        }
-    }
+    @Autowired
+    private ApplicationEventPublisher publisher;
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
         SessionPair pair = new SessionPair(session);
-        activeSessions.put(session, pair);
+        activeSessionsService.putPlaywrightActiveSession(session, pair);
         log.info("Session {}: Connection received.", session.getId());
 
-        if (semaphore.tryAcquire()) {
+        if (activeSessionsService.tryAcquirePlaywrightSlot()) {
             log.info("Session {}: Slot acquired immediately. Starting proxy.", session.getId());
             startProxyForSession(session, pair);
         } else {
             log.warn("Session {}: No available slots. Attempting to queue.", session.getId());
-            boolean enqueued = waitingQueue.offer(pair);
+            boolean enqueued = activeSessionsService.offerPlaywrightQueue(pair);
             if (!enqueued) {
                 log.error("Session {}: Proxy queue is full. Rejecting connection.", session.getId());
                 closeSessionSilently(session, CloseStatus.SERVICE_OVERLOAD.withReason("Proxy queue is full."));
@@ -89,47 +72,54 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
                 log.info("Session {}: Successfully queued. Waiting for a free slot.", session.getId());
             }
         }
+        publisher.publishEvent(new StatusChangedEvent());
     }
 
     private void startProxyForSession(WebSocketSession session, SessionPair pair) {
         proxyExecutor.submit(() -> {
             try {
-
                 String playwrightContainerVersion = getPlaywrightVersion(session);
 
                 if (playwrightContainerVersion != null) {
-                    pair.container = playwrightDockerService.startPlaywrightContainer(playwrightContainerVersion);
+                    pair.setContainer(playwrightDockerService.startPlaywrightContainer(playwrightContainerVersion));
+                    pair.setVersion(playwrightContainerVersion);
                 } else {
-                    pair.container = playwrightDockerService.startPlaywrightContainer();
+                    pair.setContainer(playwrightDockerService.startPlaywrightContainer(defaultPlaywrightVersion));
+                    pair.setVersion(defaultPlaywrightVersion);
                 }
-                if (pair.container == null) {
+                if (pair.getContainer() == null) {
                     throw new RuntimeException("Failed to start a new Playwright container.");
                 }
 
                 log.info("Session {}: Started new container {} at address {}",
-                        session.getId(), pair.container.getContainerId(), pair.container.getContainerName());
+                        session.getId(), pair.getContainer().getContainerId(), pair.getContainer().getContainerName());
 
                 WebSocketClient containerClient = createContainerClient(pair);
-                pair.containerClient = containerClient;
+                pair.setContainerClient(containerClient);
 
                 if (!containerClient.connectBlocking(15, TimeUnit.SECONDS)) {
                     log.error("Session {}: Could not connect to container within timeout.", session.getId());
                     closeSessionSilently(session, CloseStatus.SERVER_ERROR);
+                    publisher.publishEvent(new StatusChangedEvent());
+                    return;
                 }
+
+                publisher.publishEvent(new StatusChangedEvent());
             } catch (Exception e) {
                 log.error("Session {}: Failed to start proxy task.", session.getId(), e);
-                activeSessions.remove(session);
-                semaphore.release();
+                activeSessionsService.removePlaywrightActiveSession(session);
+                activeSessionsService.releasePlaywrightSlot();
                 closeSessionSilently(session, CloseStatus.SERVER_ERROR);
+                publisher.publishEvent(new StatusChangedEvent());
             }
         });
     }
 
     private WebSocketClient createContainerClient(SessionPair pair) {
-        URI containerUri = URI.create("ws://" + pair.container.getContainerName() + ":" + playwrightPort);
+        URI containerUri = URI.create("ws://" + pair.getContainer().getContainerName() + ":" + playwrightPort);
 
         Map<String, String> headersToForward = new HashMap<>();
-        pair.clientSession.getHandshakeHeaders().forEach((key, values) -> {
+        pair.getClientSession().getHandshakeHeaders().forEach((key, values) -> {
             if (!key.equalsIgnoreCase("Upgrade")
                     && !key.equalsIgnoreCase("Connection")
                     && !key.toLowerCase().startsWith("sec-websocket-")) {
@@ -142,12 +132,14 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
         return new WebSocketClient(containerUri, headersToForward) {
             @Override
             public void onOpen(ServerHandshake handshake) {
-                log.info("Session {}: Connection to container {} established.", pair.clientSession.getId(), containerUri);
-                synchronized (pair.lock) {
-                    pair.connectionToContainerEstablished = true;
-                    log.debug("Session {}: Flushing {} pending messages.", pair.clientSession.getId(), pair.pendingMessages.size());
-                    while (!pair.pendingMessages.isEmpty()) {
-                        WebSocketMessage<?> message = pair.pendingMessages.poll();
+                log.info("Session {}: Connection to container {} established.",
+                        pair.getClientSession().getId(), containerUri);
+                synchronized (pair.getLock()) {
+                    pair.setConnectionToContainerEstablished(true);
+                    log.debug("Session {}: Flushing {} pending messages.", pair.getClientSession().getId(),
+                            pair.getPendingMessages().size());
+                    while (!pair.getPendingMessages().isEmpty()) {
+                        WebSocketMessage<?> message = pair.getPendingMessages().poll();
                         if (message instanceof TextMessage) this.send(((TextMessage) message).getPayload());
                         else if (message instanceof BinaryMessage) this.send(((BinaryMessage) message).getPayload());
                     }
@@ -166,18 +158,21 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
 
             @Override
             public void onClose(int code, String reason, boolean remote) {
-                log.warn("Session {}: Container connection closed. Code: {}, Reason: {}", pair.clientSession.getId(), code, reason);
-                closeSessionSilently(pair.clientSession, new CloseStatus(code, reason));
+                log.warn("Session {}: Container connection closed. Code: {}, Reason: {}",
+                        pair.getClientSession().getId(), code, reason);
+                closeSessionSilently(pair.getClientSession(), new CloseStatus(code, reason));
                 proxyExecutor.submit(() -> {
-                    playwrightDockerService.stopContainer(pair.container.getContainerId());
-                    pair.container = null;
+                    playwrightDockerService.stopContainer(pair.getContainer().getContainerId());
+                    pair.setContainer(null);
                 });
+                publisher.publishEvent(new StatusChangedEvent());
             }
 
             @Override
             public void onError(Exception ex) {
-                log.error("Session {}: Error in container connection.", pair.clientSession.getId(), ex);
-                closeSessionSilently(pair.clientSession, CloseStatus.SERVER_ERROR);
+                log.error("Session {}: Error in container connection.", pair.getClientSession().getId(), ex);
+                closeSessionSilently(pair.getClientSession(), CloseStatus.SERVER_ERROR);
+                publisher.publishEvent(new StatusChangedEvent());
             }
         };
     }
@@ -186,29 +181,40 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         log.info("Session {}: Client connection closed with status {}.", session.getId(), status.getCode());
 
-        SessionPair removedPair = activeSessions.remove(session);
+        SessionPair removedPair = activeSessionsService.removePlaywrightActiveSession(session);
+        boolean stateChanged = false;
+
         if (removedPair != null) {
-            if (removedPair.container != null) {
-                log.info("Session {}: Cleaning up dedicated container {}.", session.getId(), removedPair.container.getContainerId());
+            stateChanged = true;
+            if (removedPair.getContainer() != null) {
+                log.info("Session {}: Cleaning up dedicated container {}.", session.getId(),
+                        removedPair.getContainer().getContainerId());
                 proxyExecutor.submit(() -> {
-                    playwrightDockerService.stopContainer(removedPair.container.getContainerId());
-                    removedPair.container = null;
+                    playwrightDockerService.stopContainer(removedPair.getContainer().getContainerId());
+                    removedPair.setContainer(null);
                 });
             }
 
-            SessionPair nextPair = waitingQueue.poll();
+            SessionPair nextPair = activeSessionsService.pollFromPlaywrightQueue();
             if (nextPair != null) {
-                log.info("Session {}: Slot is being passed to queued session {}.", session.getId(), nextPair.clientSession.getId());
-                startProxyForSession(nextPair.clientSession, nextPair);
+                log.info("Session {}: Slot is being passed to queued session {}.", session.getId(),
+                        nextPair.getClientSession().getId());
+                startProxyForSession(nextPair.getClientSession(), nextPair);
             } else {
-                semaphore.release();
-                log.info("Slot released. Queue is empty. Available slots: {}.", semaphore.availablePermits());
+                activeSessionsService.releasePlaywrightSlot();
+                log.info("Slot released. Queue is empty. Available slots: {}.",
+                        activeSessionsService.availablePlaywrightSlots());
             }
         } else {
-            boolean removed = waitingQueue.removeIf(p -> p.clientSession.equals(session));
+            boolean removed = activeSessionsService
+                    .removeFromPlaywrightQueueIf(p -> p.getClientSession().equals(session));
             if (removed) {
                 log.info("Session {}: Removed from waiting queue before it could start.", session.getId());
+                stateChanged = true;
             }
+        }
+        if (stateChanged) {
+            publisher.publishEvent(new StatusChangedEvent());
         }
     }
 
@@ -228,32 +234,34 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void processWebSocketMessage(WebSocketSession session, WebSocketMessage<?> message) {
-        SessionPair pair = activeSessions.get(session);
+        SessionPair pair = activeSessionsService.getPlaywrightActiveSession(session);
         if (pair == null) return;
-        synchronized (pair.lock) {
-            if (pair.container != null) {
-                pair.container.updateActivity();
+        synchronized (pair.getLock()) {
+            if (pair.getContainer() != null) {
+                pair.getContainer().updateActivity();
             }
-            if (pair.connectionToContainerEstablished) {
-                if (message instanceof TextMessage) pair.containerClient.send(((TextMessage) message).getPayload());
+            if (pair.isConnectionToContainerEstablished()) {
+                if (message instanceof TextMessage)
+                    pair.getContainerClient().send(((TextMessage) message).getPayload());
                 else if (message instanceof BinaryMessage)
-                    pair.containerClient.send(((BinaryMessage) message).getPayload());
+                    pair.getContainerClient().send(((BinaryMessage) message).getPayload());
             } else {
-                pair.pendingMessages.add(message);
+                pair.getPendingMessages().add(message);
             }
         }
     }
 
     private void sendToClient(SessionPair pair, WebSocketMessage<?> message) {
         try {
-            if (pair.clientSession.isOpen()) {
-                synchronized (pair.clientSession) {
-                    pair.clientSession.sendMessage(message);
+            if (pair.getClientSession().isOpen()) {
+                synchronized (pair.getClientSession()) {
+                    pair.getClientSession().sendMessage(message);
                 }
             }
         } catch (IOException e) {
-            log.error("Session {}: Failed to send message to client.", pair.clientSession.getId(), e);
-            closeSessionSilently(pair.clientSession, CloseStatus.SERVER_ERROR);
+            log.error("Session {}: Failed to send message to client.", pair.getClientSession().getId(), e);
+            closeSessionSilently(pair.getClientSession(), CloseStatus.SERVER_ERROR);
+            publisher.publishEvent(new StatusChangedEvent());
         }
     }
 
@@ -262,7 +270,6 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
             if (session.isOpen()) {
                 session.close(status);
             }
-
         } catch (IOException ignored) {
         }
     }
@@ -271,10 +278,11 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
     @Async(TaskExecutorConfig.SESSION_TASK_EXECUTOR)
     public void checkSessionTimeouts() {
         long now = System.currentTimeMillis();
-        activeSessions.forEach((session, pair) -> {
-            if (pair.container != null && (now - pair.container.getLastActivity()) > sessionTimeoutMillis) {
+        activeSessionsService.getPlaywrightActiveSessions().forEach((session, pair) -> {
+            if (pair.getContainer() != null && (now - pair.getContainer().getLastActivity()) > sessionTimeoutMillis) {
                 log.warn("Session {} timed out due to inactivity. Closing connection.", session.getId());
                 closeSessionSilently(session, CloseStatus.SESSION_NOT_RELIABLE);
+                publisher.publishEvent(new StatusChangedEvent());
             }
         });
     }
@@ -283,14 +291,15 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
     public void shutdown() {
         log.info("Shutting down ProxyWebSocketHandler...");
         proxyExecutor.shutdownNow();
-        activeSessions.values().forEach(pair -> {
-            closeSessionSilently(pair.clientSession, CloseStatus.GOING_AWAY);
-            if (pair.container != null) {
-                playwrightDockerService.stopContainer(pair.container.getContainerId());
-                pair.container = null;
+        activeSessionsService.getPlaywrightActiveSessions().values().forEach(pair -> {
+            closeSessionSilently(pair.getClientSession(), CloseStatus.GOING_AWAY);
+            if (pair.getContainer() != null) {
+                playwrightDockerService.stopContainer(pair.getContainer().getContainerId());
+                pair.setContainer(null);
             }
         });
-        waitingQueue.clear();
+        activeSessionsService.clearPlaywrightWaitingQueue();
+        publisher.publishEvent(new StatusChangedEvent());
         log.info("ProxyWebSocketHandler has been shut down.");
     }
 }

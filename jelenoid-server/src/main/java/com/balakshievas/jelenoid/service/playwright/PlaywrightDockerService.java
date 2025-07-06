@@ -15,18 +15,11 @@ import java.util.UUID;
 @Service
 public class PlaywrightDockerService extends AbstractDockerService {
 
-    @Value("${jelenoid.playwright.default_version}")
-    private String defaultPlaywrightVersion;
-
     @Value("${jelenoid.playwright.port}")
     private Integer playwrightPort;
 
     public PlaywrightDockerService() {
         super(LoggerFactory.getLogger(PlaywrightDockerService.class));
-    }
-
-    public ContainerInfo startPlaywrightContainer() {
-        return startPlaywrightContainer(defaultPlaywrightVersion);
     }
 
     public ContainerInfo startPlaywrightContainer(String playwrightVersion) {

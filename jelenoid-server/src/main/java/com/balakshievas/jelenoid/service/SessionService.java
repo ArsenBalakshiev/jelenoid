@@ -1,11 +1,7 @@
 package com.balakshievas.jelenoid.service;
 
 import com.balakshievas.jelenoid.config.TaskExecutorConfig;
-import com.balakshievas.jelenoid.controller.StatusController;
-import com.balakshievas.jelenoid.dto.BrowserInfo;
-import com.balakshievas.jelenoid.dto.ContainerInfo;
-import com.balakshievas.jelenoid.dto.PendingRequest;
-import com.balakshievas.jelenoid.dto.Session;
+import com.balakshievas.jelenoid.dto.*;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dockerjava.api.async.ResultCallback;
@@ -15,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.*;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -44,10 +41,6 @@ public class SessionService {
     private int serverPort;
 
     @Autowired
-    private EmitterService emitterService;
-    @Autowired
-    private StatusController statusController;
-    @Autowired
     private BrowserManagerService browserManagerService;
     @Autowired
     private ActiveSessionsService activeSessionsService;
@@ -60,6 +53,10 @@ public class SessionService {
     @Autowired
     @Qualifier(TaskExecutorConfig.SESSION_TASK_EXECUTOR)
     private Executor taskExecutor;
+    @Autowired
+    private ApplicationEventPublisher publisher;
+
+
 
     @Async
     @Scheduled(fixedRate = 5000)
@@ -251,15 +248,13 @@ public class SessionService {
     }
 
     private void dispatchStatusUpdate() {
-        Object statusResponse = statusController.getStatus();
-        emitterService.dispatch(statusResponse);
+        publisher.publishEvent(new StatusChangedEvent());
     }
 
     private BrowserInfo findImageForRequest(Map<String, Object> requestBody) {
         Map<String, Object> capabilitiesRequest = (Map<String, Object>) requestBody.get("capabilities");
         Map<String, Object> alwaysMatch = (Map<String, Object>) capabilitiesRequest.getOrDefault("alwaysMatch", Collections.emptyMap());
         List<Map<String, Object>> firstMatch = (List<Map<String, Object>>) capabilitiesRequest.getOrDefault("firstMatch", List.of(Collections.emptyMap()));
-        BrowserInfo browserInfoResult = null;
 
         for (Map<String, Object> firstMatchOption : firstMatch) {
             Map<String, Object> mergedCapabilities = new HashMap<>(alwaysMatch);

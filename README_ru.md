@@ -87,3 +87,8 @@ docker build -t jelenoid-server:latest .\jelenoid-server\
 ```shell
 docker build -t jelenoid-ui:latest .\jelenoid-ui\.
 ```
+
+Demo nginx для тестов:
+```shell
+docker run -d --name mynginx -p 8080:80 nginx
+```
