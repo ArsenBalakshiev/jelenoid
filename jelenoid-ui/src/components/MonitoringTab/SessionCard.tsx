@@ -1,33 +1,66 @@
 import React from 'react';
-import { SessionInfo } from '../../types/server';
+import { MonitoringSession } from '../../types/server';
 import './SessionCard.css';
 
 interface Props {
-    session: SessionInfo;
+    session: MonitoringSession;
     active: boolean;
-    onOpen:   (s: SessionInfo) => void;
-    onClose:  (s: SessionInfo) => void;
+    onOpen: (s: MonitoringSession) => void;
+    onClose: (s: MonitoringSession) => void;
 }
 
-const SessionCard: React.FC<Props> = ({ session, active, onOpen, onClose }) => (
-    <div className={`session-card ${active ? 'active' : ''}`}>
-        <div className="session-header">
-      <span className="browser">
-        {session.browserName} {session.browserVersion}
-      </span>
-            {session.vncEnabled && <span className="vnc-badge">VNC</span>}
-        </div>
+const logos: Record<string, string> = {
+    selenium: '/assets/selenium_logo.png',      // или внешняя ссылка
+    playwright: '/assets/playwright_logo.png'   // или внешняя ссылка
+};
 
-        <div className="session-info">
-            <div><b>hubSessionId:</b> <span className="mono">{session.hubSessionId}</span></div>
-            <div><b>container:</b>    <span className="mono">{session.containerInfo.containerName}</span></div>
-        </div>
+const SessionCard: React.FC<Props> = ({ session, active, onOpen, onClose }) => {
+    const containerName = session.containerInfo?.containerName || '—';
+    const logoSrc = logos[session.kind];
+    const logoAlt = session.kind === 'selenium' ? 'Selenium' : 'Playwright';
 
-        <div className="session-actions">
-            <button onClick={() => onOpen(session)}>Мониторинг</button>
-            <button className="danger" onClick={() => onClose(session)}>Закрыть сессию</button>
+    return (
+        <div className={`session-card ${active ? 'active' : ''}`}>
+            <div className="session-header">
+                <img
+                    src={logoSrc}
+                    alt={logoAlt}
+                    className="session-logo"
+                />
+                <span className="browser">
+                    {session.kind === 'selenium'
+                        ? `${session.browserName} ${session.browserVersion}`
+                        : `${session.playwrightVersion}`}
+                </span>
+                {session.kind === 'selenium' && session.vncEnabled && (
+                    <span className="vnc-badge">VNC</span>
+                )}
+            </div>
+            <div className="session-info">
+                {session.kind === 'selenium' ? (
+                    <>
+                        <div><b>hubSessionId:</b> <span className="mono">{session.hubSessionId}</span></div>
+                        <div><b>container:</b> <span className="mono">{containerName}</span></div>
+                    </>
+                ) : (
+                    <>
+                        <div><b>clientSessionId:</b> <span className="mono">{session.clientSessionId}</span></div>
+                        <div><b>container:</b> <span className="mono">{containerName}</span></div>
+                    </>
+                )}
+            </div>
+            <div className="session-actions">
+                {session.kind === 'selenium' ? (
+                    <>
+                        <button onClick={() => onOpen(session)}>Мониторинг</button>
+                        <button className="danger" onClick={() => onClose(session)}>Закрыть сессию</button>
+                    </>
+                ) : (
+                    <span style={{ color: '#888', fontSize: 14 }}>Нет мониторинга</span>
+                )}
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 export default SessionCard;

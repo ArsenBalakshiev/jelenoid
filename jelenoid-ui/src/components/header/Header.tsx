@@ -2,67 +2,39 @@ import React, { useState, useEffect } from 'react';
 import { ServerState } from '../../types/server';
 import './Header.css';
 
-const Header: React.FC = () => {
-    const [serverState, setServerState] = useState<ServerState>({
-        total: 0,
-        used: 0,
-        queued: 0,
-        inProgress: 0,
-        sessions: [],
-        queuedRequests: [],
-    });
+interface HeaderProps {
+    serverState: ServerState;
+}
 
-    // Используем три состояния: 'connecting', 'connected', 'disconnected'
+const Header: React.FC<HeaderProps> = ({ serverState }) => {
     const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
 
     useEffect(() => {
-        // Устанавливаем начальный статус при создании компонента
         setConnectionStatus('connecting');
         const eventSource = new EventSource(
             `${import.meta.env.VITE_SERVER_BASE_URL.replace(/\/$/, '')}/events`
         );
 
-        // Срабатывает только при успешном установлении соединения
         eventSource.onopen = () => {
             setConnectionStatus('connected');
         };
 
-        // Ключевой обработчик: срабатывает при ошибке подключения
         eventSource.onerror = () => {
-            // readyState переходит в CLOSED (2) при невозможности подключиться
             if (eventSource.readyState === EventSource.CLOSED) {
                 setConnectionStatus('disconnected');
             }
-            // Соединение будет закрыто браузером, и он будет пытаться переподключиться
             eventSource.close();
         };
 
-        // Обработка входящих данных
-        const handleStateUpdate = (event: MessageEvent) => {
-            try {
-                const data = JSON.parse(event.data);
-                setServerState(data);
-                // Если пришли данные, значит соединение точно есть
-                if (connectionStatus !== 'connected') {
-                    setConnectionStatus('connected');
-                }
-            } catch (error) {
-                console.error('Ошибка парсинга данных SSE:', error);
-            }
-        };
-
-        eventSource.addEventListener('state-update', handleStateUpdate);
-        eventSource.addEventListener('message', handleStateUpdate);
-
-        // Очистка при размонтировании компонента
+        // Очистка
         return () => {
-            eventSource.removeEventListener('state-update', handleStateUpdate);
-            eventSource.removeEventListener('message', handleStateUpdate);
             eventSource.close();
         };
-    }, []); // Пустой массив зависимостей для выполнения один раз
+    }, []);
 
-    const activeSessions = serverState.sessions.length;
+    const selenium = serverState.seleniumStat;
+    const playwright = serverState.playwrightStat;
+    const activeSessions = selenium.sessions.length;
 
     const getStatusIndicatorClass = () => {
         switch (connectionStatus) {
@@ -77,9 +49,7 @@ const Header: React.FC = () => {
 
     return (
         <header className="header">
-            <div className="logo">
-                Jelenoid
-            </div>
+            <div className="logo">Jelenoid</div>
             <div className="status-panel">
                 <div className="status-item">
                     <span className="status-label">Status</span>
@@ -90,13 +60,25 @@ const Header: React.FC = () => {
                 </div>
                 <div className="status-divider"></div>
                 <div className="status-item">
-                    <span className="status-label">Queue</span>
-                    <span className="status-value">{serverState.queued}</span>
+                    <span className="status-label">Selenium Queue</span>
+                    <span className="status-value">{selenium.queued}</span>
                 </div>
                 <div className="status-divider"></div>
                 <div className="status-item">
-                    <span className="status-label">Limit</span>
-                    <span className="status-value">{activeSessions} / {serverState.total}</span>
+                    <span className="status-label">Selenium Limit</span>
+                    <span className="status-value">{activeSessions} / {selenium.total}</span>
+                </div>
+                <div className="status-divider"></div>
+                <div className="status-item">
+                    <span className="status-label">Playwright Queue</span>
+                    <span className="status-value">{playwright.queuedPlaywrightSessionsSize}</span>
+                </div>
+                <div className="status-divider"></div>
+                <div className="status-item">
+                    <span className="status-label">Playwright Limit</span>
+                    <span className="status-value">
+                        {playwright.activePlaywrightSessionsSize} / {playwright.maxPlaywrightSessionsSize}
+                    </span>
                 </div>
             </div>
         </header>
@@ -104,4 +86,3 @@ const Header: React.FC = () => {
 };
 
 export default Header;
-

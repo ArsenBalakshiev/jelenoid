@@ -21,7 +21,21 @@ export interface QueuedRequest {
     [key: string]: any;
 }
 
-export interface ServerState {
+export interface SessionPainInfo {
+    clientSessionId: string;
+    clientSessionUrl: string;
+    containerClientUrl: string;
+    playwrightVersion: string;
+    containerInfo: ContainerInfo;
+}
+
+export interface ContainerInfo {
+    containerId: string;
+    containerName: string;
+    lastActivity: number;
+}
+
+export interface SeleniumStat {
     total: number;
     used: number;
     queued: number;
@@ -30,4 +44,31 @@ export interface ServerState {
     queuedRequests: QueuedRequest[];
 }
 
-export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error';
+export interface PlaywrightStat {
+    maxPlaywrightSessionsSize: number;
+    activePlaywrightSessionsSize: number;
+    queuedPlaywrightSessionsSize: number;
+    activePlaywrightSessions: SessionPainInfo[];
+    queuedPlaywrightSessions: SessionPainInfo[];
+}
+
+export interface ServerState {
+    seleniumStat: SeleniumStat;
+    playwrightStat: PlaywrightStat;
+}
+
+export type SessionKind = 'selenium' | 'playwright';
+
+export interface MonitoringSessionBase {
+    kind: SessionKind;
+}
+
+export interface SeleniumMonitoringSession extends MonitoringSessionBase, SessionInfo {
+    kind: 'selenium';
+}
+
+export interface PlaywrightMonitoringSession extends MonitoringSessionBase, SessionPainInfo {
+    kind: 'playwright';
+}
+
+export type MonitoringSession = SeleniumMonitoringSession | PlaywrightMonitoringSession;

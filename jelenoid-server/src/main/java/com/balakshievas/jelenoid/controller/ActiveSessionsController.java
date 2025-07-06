@@ -20,12 +20,12 @@ public class ActiveSessionsController {
 
     @GetMapping("/sessions")
     public Map<String, Session> getAllSessions() {
-        return activeSessionsService.getActiveSessions();
+        return activeSessionsService.getSeleniumActiveSessions();
     }
 
     @GetMapping("/request")
     public BlockingQueue<PendingRequest> getAllPendingRequests() {
-        return activeSessionsService.getPendingRequests();
+        return activeSessionsService.getSeleniumPendingRequests();
     }
 
     @GetMapping("/sessions/size")
