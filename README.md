@@ -23,6 +23,8 @@ Unlike simple proxies, Jelenoid acts as a full-fledged orchestrator, dynamically
 - **Full Test Isolation:** Provides a clean environment for every test run.
 - **Resource Limiting:** Sets limits on the number of parallel sessions and browser versions.
 - **Request Queue:** Features an integrated queuing mechanism to manage load, which is critical for CI/CD pipelines.
+- **Jelenoid UI:** A simple and convenient web interface for monitoring sessions.
+
 
 ### 🤖 Selenium
 - **Full W3C WebDriver Proxying:** Reliably forwards all commands of the protocol.
@@ -31,7 +33,6 @@ Unlike simple proxies, Jelenoid acts as a full-fledged orchestrator, dynamically
 - **File Uploads:** Easily upload files to the container during a test via the `/session/{sessionId}/file` endpoint.
 - **Live VNC Streaming:** Interactive, real-time access to the browser's desktop via any noVNC client.
 - **Chrome DevTools Protocol (CDP) Proxy:** Direct access to the browser's DevTools for network emulation and other debugging tasks.
-- **Jelenoid UI:** A simple and convenient web interface for monitoring sessions and viewing VNC streams.
 
 ### 🎭 Playwright
 - **Native Support:** Full integration for running Playwright tests.
