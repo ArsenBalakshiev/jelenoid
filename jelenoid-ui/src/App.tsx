@@ -4,7 +4,7 @@ import Tabs from './components/tabs';
 import MonitoringTab from './components/MonitoringTab/MonitoringTab';
 import ManualSessionTab from './components/ManualSessionTab/ManualSessionTab';
 import './App.css';
-import {ServerState, SessionInfo} from "./types/server.ts";
+import { ServerState, MonitoringSession } from "./types/server";
 
 const TABS = [
     { label: 'Monitoring', value: 'monitoring' },
@@ -27,7 +27,6 @@ const initialServerState: ServerState = {
 const App: React.FC = () => {
     const [activeTab, setActiveTab] = useState<string>('monitoring');
     const [serverState, setServerState] = useState<ServerState>(initialServerState);
-    const [sessions, setSessions] = useState<SessionInfo[]>(serverState.seleniumStat.sessions);
 
     useEffect(() => {
         const es = new EventSource(
@@ -37,12 +36,15 @@ const App: React.FC = () => {
             try {
                 const data = JSON.parse((event as MessageEvent).data);
                 setServerState(data);
-            } catch (e) {
-                // Можно добавить обработку ошибок
-            }
+            } catch {}
         });
         return () => es.close();
     }, []);
+
+    const monitoringSessions: MonitoringSession[] = [
+        ...serverState.seleniumStat.sessions.map(s => ({ ...s, kind: 'selenium' as const })),
+        ...serverState.playwrightStat.activePlaywrightSessions.map(s => ({ ...s, kind: 'playwright' as const }))
+    ];
 
     return (
         <div className="App">
@@ -58,10 +60,7 @@ const App: React.FC = () => {
                     />
                     <div className="tab-content">
                         {activeTab === 'monitoring' && (
-                            <MonitoringTab
-                                sessions={sessions}
-                                setSessions={setSessions}
-                            />
+                            <MonitoringTab sessions={monitoringSessions} />
                         )}
                         {activeTab === 'manual' && <ManualSessionTab/>}
                     </div>

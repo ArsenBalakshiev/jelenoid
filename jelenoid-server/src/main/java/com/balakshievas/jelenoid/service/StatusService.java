@@ -82,6 +82,8 @@ public class StatusService {
 
                     SessionPairInfo sessionPairInfo = new SessionPairInfo();
 
+                    sessionPairInfo.setPlaywrightVersion(e.getVersion());
+
                     if (e.getClientSession() != null) {
                         sessionPairInfo.setClientSessionId(e.getClientSession().getId());
                         sessionPairInfo.setClientSessionUrl(e.getClientSession().getUri());
@@ -99,7 +101,5 @@ public class StatusService {
 
                 })
                 .toList();
-
     }
-
 }

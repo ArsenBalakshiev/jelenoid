@@ -41,6 +41,7 @@ public class StatusResponse {
             private String clientSessionId;
             private URI clientSessionUrl;
             private URI containerClientUrl;
+            private String playwrightVersion;
             private ContainerInfo containerInfo;
         }
 

@@ -23,6 +23,8 @@ public class StatusNotifier {
 
     @EventListener
     public void onStatusChanged(StatusChangedEvent event) {
-        emitterService.dispatch(statusService.buildStatus());
+        try {
+            emitterService.dispatch(statusService.buildStatus());
+        } catch (Exception ignored) {}
     }
 }

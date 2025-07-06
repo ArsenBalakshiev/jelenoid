@@ -7,11 +7,20 @@
     box-shadow: 0 2px 8px rgba(0,0,0,0.03);
     border: 1px solid #222;
 }
+.session-logo {
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+    border-radius: 12px;
+    margin-right: 16px;
+    box-shadow: 0 2px 8px #0002;
+    background: #fff;
+    border: 2px solid #eee;
+}
 .session-header {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 8px;
+    gap: 8px;
 }
 .browser {
     font-size: 18px;

@@ -25,6 +25,7 @@ export interface SessionPainInfo {
     clientSessionId: string;
     clientSessionUrl: string;
     containerClientUrl: string;
+    playwrightVersion: string;
     containerInfo: ContainerInfo;
 }
 
@@ -56,4 +57,18 @@ export interface ServerState {
     playwrightStat: PlaywrightStat;
 }
 
-export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error';
+export type SessionKind = 'selenium' | 'playwright';
+
+export interface MonitoringSessionBase {
+    kind: SessionKind;
+}
+
+export interface SeleniumMonitoringSession extends MonitoringSessionBase, SessionInfo {
+    kind: 'selenium';
+}
+
+export interface PlaywrightMonitoringSession extends MonitoringSessionBase, SessionPainInfo {
+    kind: 'playwright';
+}
+
+export type MonitoringSession = SeleniumMonitoringSession | PlaywrightMonitoringSession;
