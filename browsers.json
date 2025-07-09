@@ -1,9 +1,20 @@
- {
+{
   "chrome": {
     "default": "133",
     "versions": {
       "133": {
         "image": "twilio/selenoid:chrome_stable_133"
+      },
+      "138": {
+        "image": "twilio/selenoid:chrome_stable_138"
+      }
+    }
+  },
+  "yandex" : {
+    "default": "133",
+    "versions": {
+      "133": {
+        "image": "twilio/selenoid:yandex_stable_133"
       }
     }
   }
