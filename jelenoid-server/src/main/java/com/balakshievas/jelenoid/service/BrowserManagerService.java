@@ -21,13 +21,15 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class BrowserManagerService {
 
+    private final Object lock = new Object();
+
+    private static final Logger log = LoggerFactory.getLogger(BrowserManagerService.class);
+
     private static final Map<String, BrowserInfo> defaultBrowsers = new ConcurrentHashMap<>();
     private static final Map<String, BrowserInfo> browserList = new ConcurrentHashMap<>();
 
     @Autowired
     private ObjectMapper mapper;
-
-    private static final Logger log = LoggerFactory.getLogger(BrowserManagerService.class);
 
     @Autowired
     private BrowserProperties browserProperties;
@@ -77,48 +79,54 @@ public class BrowserManagerService {
     }
 
     public BrowserInfo addBrowserClearly(BrowserInfo browserInfo) {
-        if (browserInfo.getIsDefault()) {
-            setDefaultBrowser(browserInfo);
-        }
-        return browserList.put(getBrowserKey(browserInfo.getName(), browserInfo.getVersion()), browserInfo);
+        synchronized (lock) {
+            if (browserInfo.getIsDefault()) {
+                setDefaultBrowser(browserInfo);
+            }
+            return browserList.put(getBrowserKey(browserInfo.getName(), browserInfo.getVersion()), browserInfo);}
     }
 
     public BrowserInfo addBrowser(BrowserInfo browserInfo) {
-        if (browserInfo.getIsDefault()) {
-            setDefaultBrowser(browserInfo);
-        }
-        BrowserInfo result = browserList.put(getBrowserKey(browserInfo.getName(),
-                browserInfo.getVersion()), browserInfo);
-        try {
-            writeBrowsersToFile(new ArrayList<>(browserList.values()));
-        } catch (Exception e) {
-            log.error("Ошибка при записи файла после добавления браузера", e);
-        }
-        return result;
+        synchronized (lock) {
+            if (browserInfo.getIsDefault()) {
+                setDefaultBrowser(browserInfo);
+            }
+            BrowserInfo result = browserList.put(getBrowserKey(browserInfo.getName(),
+                    browserInfo.getVersion()), browserInfo);
+            try {
+                writeBrowsersToFile(new ArrayList<>(browserList.values()));
+            } catch (Exception e) {
+                log.error("Ошибка при записи файла после добавления браузера", e);
+            }
+            return result;}
     }
 
     public BrowserInfo deleteBrowser(String browserName, String browserVersion) {
-        String key = getBrowserKey(browserName, browserVersion);
-        defaultBrowsers.remove(key);
-        BrowserInfo result = browserList.remove(key);
-        try {
-            writeBrowsersToFile(new ArrayList<>(browserList.values()));
-        } catch (Exception e) {
-            log.error("Ошибка при записи файла после удаления браузера", e);
+        synchronized (lock) {
+            String key = getBrowserKey(browserName, browserVersion);
+            defaultBrowsers.remove(key);
+            BrowserInfo result = browserList.remove(key);
+            try {
+                writeBrowsersToFile(new ArrayList<>(browserList.values()));
+            } catch (Exception e) {
+                log.error("Ошибка при записи файла после удаления браузера", e);
+            }
+            return result;
         }
-        return result;
     }
 
     public List<BrowserInfo> getAllBrowsers() {
-        return new ArrayList<>(browserList.values());
+        synchronized (lock) {return new ArrayList<>(browserList.values());}
     }
 
     public String getImageByBrowserNameAndVersion(String browserName, String version) {
-        BrowserInfo browserInfo = browserList.get(getBrowserKey(browserName, version));
-        if (browserInfo == null) {
-            return defaultBrowsers.get(browserName).getDockerImageName();
-        } else {
-            return browserInfo.getDockerImageName();
+        synchronized (lock) {
+            BrowserInfo browserInfo = browserList.get(getBrowserKey(browserName, version));
+            if (browserInfo == null) {
+                return defaultBrowsers.get(browserName).getDockerImageName();
+            } else {
+                return browserInfo.getDockerImageName();
+            }
         }
     }
 
