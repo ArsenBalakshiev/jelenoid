@@ -21,9 +21,16 @@ public class BrowserManagerController {
     }
 
     @PutMapping("/add")
-    public ResponseEntity<BrowserInfo> getBrowsers(@RequestBody BrowserInfo browserInfo) {
+    public ResponseEntity<BrowserInfo> saveBrowser(@RequestBody BrowserInfo browserInfo) {
         BrowserInfo browserInfoSaved = browserManagerService.addBrowser(browserInfo);
         return ResponseEntity.ok(browserInfoSaved);
+    }
+
+    @DeleteMapping("/delete")
+    public ResponseEntity<BrowserInfo> deleteBrowser(@RequestParam String browserName,
+                                                     @RequestParam String browserVersion) {
+        BrowserInfo browserInfoDeleted = browserManagerService.deleteBrowser(browserName, browserVersion);
+        return ResponseEntity.ok(browserInfoDeleted);
     }
 
 }
