@@ -177,7 +177,7 @@ public class BrowserManagerService {
             Map<String, Object> browserMap = (Map<String, Object>) data.get(browser.getName());
             Map<String, Object> versions = (Map<String, Object>) browserMap.get("versions");
             versions.put(browser.getVersion(), Map.of("image", browser.getDockerImageName()));
-            if (Boolean.TRUE.equals(browser.getIsDefault())) {
+            if (browser.getIsDefault()) {
                 browserMap.put("default", browser.getVersion());
             }
         }
