@@ -1,7 +1,9 @@
 package com.balakshievas.jelenoid.websocket.playwright;
 
+import com.balakshievas.jelenoid.config.SessionPublisher;
 import com.balakshievas.jelenoid.config.TaskExecutorConfig;
 import com.balakshievas.jelenoid.dto.PlaywrightSession;
+import com.balakshievas.jelenoid.dto.SessionInfo;
 import com.balakshievas.jelenoid.dto.StatusChangedEvent;
 import com.balakshievas.jelenoid.service.ActiveSessionsService;
 import com.balakshievas.jelenoid.service.playwright.PlaywrightDockerService;
@@ -22,8 +24,10 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -52,6 +56,11 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
 
     @Autowired
     private ApplicationEventPublisher publisher;
+
+    @Autowired
+    private SessionPublisher sessionPublisher;
+    @Autowired
+    private SessionPublisher sessionEventPublisher;
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
@@ -103,6 +112,21 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
                     publisher.publishEvent(new StatusChangedEvent());
                     return;
                 }
+
+                SessionInfo sessionInfo = new SessionInfo(
+                        UUID.randomUUID().toString(),
+                        LocalDateTime.now(),
+                        null,
+                        "playwright",
+                        playwrightContainerVersion,
+                        "started",
+                        null
+                );
+
+                pair.setSessionInfo(sessionInfo);
+
+                sessionEventPublisher.publish(sessionInfo);
+
                 publisher.publishEvent(new StatusChangedEvent());
             } catch (Exception e) {
                 log.error("Session {}: Failed to start proxy task.", session.getId(), e);
@@ -164,6 +188,14 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
                     playwrightDockerService.stopContainer(pair.getContainerInfo().getContainerId());
                     pair.setContainerInfo(null);
                 });
+                SessionInfo sessionInfo = pair.getSessionInfo();
+                sessionInfo.setEndTime(LocalDateTime.now());
+                sessionInfo.setStatus("ended");
+                sessionInfo.setEndedBy("playwright onClose");
+
+                pair.setSessionInfo(sessionInfo);
+
+                sessionEventPublisher.publish(sessionInfo);
                 publisher.publishEvent(new StatusChangedEvent());
             }
 
@@ -171,6 +203,16 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
             public void onError(Exception ex) {
                 log.error("Session {}: Error in container connection.", pair.getClientSession().getId(), ex);
                 closeSessionSilently(pair.getClientSession(), CloseStatus.SERVER_ERROR);
+
+                SessionInfo sessionInfo = pair.getSessionInfo();
+                sessionInfo.setEndTime(LocalDateTime.now());
+                sessionInfo.setStatus("ended by error");
+                sessionInfo.setEndedBy("playwright onError");
+
+                pair.setSessionInfo(sessionInfo);
+
+                sessionEventPublisher.publish(sessionInfo);
+
                 publisher.publishEvent(new StatusChangedEvent());
             }
         };

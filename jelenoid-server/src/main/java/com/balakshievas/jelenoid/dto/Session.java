@@ -9,6 +9,7 @@ public class Session {
 
     private ContainerInfo containerInfo;
     private String version;
+    private SessionInfo sessionInfo;
 
     public long getLastActivity() {
         return containerInfo.getLastActivity();

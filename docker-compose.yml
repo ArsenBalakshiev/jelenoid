@@ -7,6 +7,8 @@ services:
     ports:
       - "4444:4444"
       - "5005:5005"
+    environment:
+      - NATS_SERVER=nats://nats:4222
     volumes:
       - ./jelenoid-server/src:/app/src
       - ./jelenoid-server/target:/app/target
@@ -28,9 +30,24 @@ services:
       - jelenoid-net
     depends_on:
       - jelenoid-server
-
+  nats:
+    image: nats:2.10
+    container_name: nats
+    networks:
+      - jelenoid-net
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: |
+      -js
+      -m 8222
+      -sd /data/jetstream
+    volumes:
+      - nats_data:/data/jetstream
 
 networks:
   jelenoid-net:
     name: jelenoid-net
-    driver: bridge
+
+volumes:
+  nats_data: {}
