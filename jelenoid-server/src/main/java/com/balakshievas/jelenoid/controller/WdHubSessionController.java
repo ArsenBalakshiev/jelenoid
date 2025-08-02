@@ -53,8 +53,6 @@ public class WdHubSessionController {
         }
 
         String filePathInContainer = sessionService.uploadFileToSession(sessionId, base64EncodedZip);
-
-        // WebDriver протокол ожидает в ответе JSON с путем к файлу
         return ResponseEntity.ok(Map.of("value", filePathInContainer));
     }
 }

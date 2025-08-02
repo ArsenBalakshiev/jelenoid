@@ -12,32 +12,32 @@
 
 **Jelenoid** is a high-performance, lightweight, and fully customizable Selenium hub written in Java/Spring. It provides native support for both **Selenium** and **Playwright**, allowing you to run UI tests in isolated Docker containers through a single API.
 
-Unlike simple proxies, Jelenoid acts as a full-fledged orchestrator, dynamically managing the lifecycle of browser sessions to ensure a clean and reliable environment for every test run.
+Unlike simple proxies, Jelenoid acts as a full-fledged orchestrator, dynamically managing the lifecycle of browser seleniumSessions to ensure a clean and reliable environment for every test run.
 
 ---
 
 ## 🚀 Key Features
 
 ### 🌐 General Functionality
-- **Dynamic Container Management:** Automatically starts and stops Docker containers for each session.
+- **Dynamic Container Management:** Automatically starts and stops Docker containers for each seleniumSession.
 - **Full Test Isolation:** Provides a clean environment for every test run.
-- **Resource Limiting:** Sets limits on the number of parallel sessions and browser versions.
+- **Resource Limiting:** Sets limits on the number of parallel seleniumSessions and browser versions.
 - **Request Queue:** Features an integrated queuing mechanism to manage load, which is critical for CI/CD pipelines.
-- **Jelenoid UI:** A simple and convenient web interface for monitoring sessions.
+- **Jelenoid UI:** A simple and convenient web interface for monitoring seleniumSessions.
 
 
 ### 🤖 Selenium
 - **Full W3C WebDriver Proxying:** Reliably forwards all commands of the protocol.
-- **Centralized State Management:** A single service (`ActiveSessionsService`) tracks all active sessions.
+- **Centralized State Management:** A single service (`ActiveSessionsService`) tracks all active seleniumSessions.
 - **Flexible Configuration:** Full support for `alwaysMatch` / `firstMatch` and vendor-specific options (`selenoid:options`).
-- **File Uploads:** Easily upload files to the container during a test via the `/session/{sessionId}/file` endpoint.
+- **File Uploads:** Easily upload files to the container during a test via the `/seleniumSession/{sessionId}/file` endpoint.
 - **Live VNC Streaming:** Interactive, real-time access to the browser's desktop via any noVNC client.
 - **Chrome DevTools Protocol (CDP) Proxy:** Direct access to the browser's DevTools for network emulation and other debugging tasks.
 
 ### 🎭 Playwright
 - **Native Support:** Full integration for running Playwright tests.
 - **Command Proxying:** Reliably forwards commands from the test to the browser.
-- **Session Management:** Dynamically creates and manages sessions in containers.
+- **Session Management:** Dynamically creates and manages seleniumSessions in containers.
 
 ---
 
@@ -47,20 +47,20 @@ The application is configured using environment variables.
 
 | Variable                   | Description                                                      | Default Value                          |
 | -------------------------- | ---------------------------------------------------------------- | -------------------------------------- |
-| `PARALLEL_SESSIONS`        | The number of parallel sessions for Selenium tests.              | `10`                                   |
-| `QUEUE_LIMIT`              | The queue limit for Selenium sessions.                           | `100`                                  |
+| `PARALLEL_SESSIONS`        | The number of parallel seleniumSessions for Selenium tests.              | `10`                                   |
+| `QUEUE_LIMIT`              | The queue limit for Selenium seleniumSessions.                           | `100`                                  |
 | `DOCKER_NETWORK`           | The Docker network for containers.                               | `jelenoid-net`                         |
 | `BROWSERS_FILE`            | The path to the `browsers.json` file for image configuration.     | (internal file)                        |
 | `QUEUE_TIMEOUT`            | The timeout for the Selenium queue (in ms).                      | `30000`                                |
-| `SESSION_TIMEOUT`          | The inactivity timeout for a Selenium/Playwright session (in ms).| `600000`                               |
-| `STARTUP_TIMEOUT`          | The timeout for the job that tracks hanging sessions (in ms).    | `30000`                                |
+| `SESSION_TIMEOUT`          | The inactivity timeout for a Selenium/Playwright seleniumSession (in ms).| `600000`                               |
+| `STARTUP_TIMEOUT`          | The timeout for the job that tracks hanging seleniumSessions (in ms).    | `30000`                                |
 | `CLEANUP_TIMEOUT`          | The timeout for container removal (in ms).                       | `15000`                                |
 | `CONTAINER_STARTING_TIMEOUT` | The timeout for container startup (in ms).                       | `60000`                                |
 | `UI_HOSTS_LIST`            | A comma-separated list of UI hosts for CORS.                     | `http://localhost:80,http://localhost` |
 | `PLAYWRIGHT_PORT`          | The port inside the Playwright container.                        | `3000`                                 |
 | `PLAYWRIGHT_DEFAULT_VERSION`| **(Required)** The default version of Playwright.                | (none)                                 |
-| `PLAYWRIGHT_SESSION_LIMIT` | The number of parallel sessions for Playwright tests.            | `10`                                   |
-| `PLAYWRIGHT_QUEUE_LIMIT`   | The queue limit for Playwright sessions.                         | `100`                                  |
+| `PLAYWRIGHT_SESSION_LIMIT` | The number of parallel seleniumSessions for Playwright tests.            | `10`                                   |
+| `PLAYWRIGHT_QUEUE_LIMIT`   | The queue limit for Playwright seleniumSessions.                         | `100`                                  |
 
 ---
 

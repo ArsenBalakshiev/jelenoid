@@ -21,7 +21,7 @@ public class StatusService {
     }
 
     public StatusResponse buildStatus() {
-        List<Session> sessions = activeSessionsService.getSeleniumActiveSessions()
+        List<SeleniumSession> seleniumSessions = activeSessionsService.getSeleniumActiveSessions()
                 .values().stream().toList();
 
         List<QueuedRequestInfo> queuedRequestInfos = activeSessionsService.getSeleniumPendingRequests().stream()
@@ -30,18 +30,18 @@ public class StatusService {
 
         StatusResponse.SeleniumStat seleniumStat = new StatusResponse.SeleniumStat(
                 activeSessionsService.getSeleniumSessionLimit(),
-                sessions.size(),
+                seleniumSessions.size(),
                 activeSessionsService.getQueueSize(),
                 activeSessionsService.getInProgressCount(),
-                sessions,
+                seleniumSessions,
                 queuedRequestInfos
         );
 
-        List<SessionPair> activePlaywrightSessions = activeSessionsService.getPlaywrightActiveSessions()
+        List<PlaywrightSession> activePlaywrightSessions = activeSessionsService.getPlaywrightActiveSessions()
                 .values()
                 .stream().toList();
 
-        List<SessionPair> queuePlaywrightSessions = activeSessionsService.getPlaywrightWaitingQueue()
+        List<PlaywrightSession> queuePlaywrightSessions = activeSessionsService.getPlaywrightWaitingQueue()
                 .stream()
                 .toList();
 
@@ -75,7 +75,7 @@ public class StatusService {
         return new QueuedRequestInfo(browserName, browserVersion, pendingRequest.getQueuedTime());
     }
 
-    private List<SessionPairInfo> convertToSessionPairInfo(List<SessionPair> sessions) {
+    private List<SessionPairInfo> convertToSessionPairInfo(List<PlaywrightSession> sessions) {
 
         return sessions.stream()
                 .map(e -> {
@@ -93,8 +93,8 @@ public class StatusService {
                         sessionPairInfo.setContainerClientUrl(e.getContainerClient().getURI());
                     }
 
-                    if (e.getContainer() != null) {
-                        sessionPairInfo.setContainerInfo(e.getContainer());
+                    if (e.getContainerInfo() != null) {
+                        sessionPairInfo.setContainerInfo(e.getContainerInfo());
                     }
 
                     return sessionPairInfo;

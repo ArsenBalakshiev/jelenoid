@@ -56,8 +56,6 @@ public class SessionService {
     @Autowired
     private ApplicationEventPublisher publisher;
 
-
-
     @Async
     @Scheduled(fixedRate = 5000)
     public void events() {
@@ -120,19 +118,16 @@ public class SessionService {
                     .retrieve()
                     .toEntity(String.class);
 
-            Map<String, Object> responseBody = objectMapper.readValue(response.getBody(), new TypeReference<>() {
-            });
+            Map<String, Object> responseBody = objectMapper.readValue(response.getBody(), new TypeReference<>() {});
             Map<String, Object> responseValue = (Map<String, Object>) responseBody.get("value");
             String remoteSessionId = (String) responseValue.get("sessionId");
 
-            if (remoteSessionId == null) {
-                throw new IllegalStateException("Container did not return a session ID");
-            }
+            if (remoteSessionId == null) {throw new IllegalStateException("Container did not return a session ID");}
 
             String hubSessionId = UUID.randomUUID().toString();
-            Session session = new Session(hubSessionId, remoteSessionId, containerInfo,
+            SeleniumSession seleniumSession = new SeleniumSession(hubSessionId, remoteSessionId, containerInfo,
                     browserInfo.getName(), browserInfo.getVersion(), enableVnc);
-            activeSessionsService.sessionSuccessfullyCreated(hubSessionId, session);
+            activeSessionsService.sessionSuccessfullyCreated(hubSessionId, seleniumSession);
 
             dispatchStatusUpdate();
 
@@ -144,7 +139,6 @@ public class SessionService {
                 }
             }
 
-            // 2. Добавляем наш правильный WebSocket URL, как и раньше
             String devToolsUrl = String.format("ws://%s:%d/session/%s/se/cdp", serverAddress, serverPort, hubSessionId);
             containerCapabilities.put("se:cdp", devToolsUrl);
             log.info("Advertising 'se:cdp' endpoint: {}", devToolsUrl);
@@ -153,18 +147,17 @@ public class SessionService {
             return Map.of("value", responseValue);
 
         } catch (Exception e) {
-            if (containerInfo != null) {
-                containerManagerService.stopContainer(containerInfo.getContainerId());
-            }
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to create session in container", e);
+            if (containerInfo != null) {containerManagerService.stopContainer(containerInfo.getContainerId());}
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to create session in container", e);
         }
     }
 
     public void deleteSession(String hubSessionId) {
-        Session session = activeSessionsService.sessionDeleted(hubSessionId);
+        SeleniumSession seleniumSession = activeSessionsService.sessionDeleted(hubSessionId);
         dispatchStatusUpdate();
-        if (session != null) {
-            containerManagerService.stopContainer(session.getContainerInfo().getContainerId());
+        if (seleniumSession != null) {
+            containerManagerService.stopContainer(seleniumSession.getContainerInfo().getContainerId());
             processQueue();
         }
     }
@@ -194,16 +187,16 @@ public class SessionService {
     }
 
     public ResponseEntity<byte[]> proxyRequest(String hubSessionId, HttpMethod method, String relativePath, HttpHeaders headers, byte[] body) {
-        Session session = activeSessionsService.get(hubSessionId);
+        SeleniumSession seleniumSession = activeSessionsService.get(hubSessionId);
 
-        if (session == null) {
+        if (seleniumSession == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found: " + hubSessionId);
         }
 
-        session.updateActivity();
+        seleniumSession.updateActivity();
 
-        ContainerInfo containerInfo = session.getContainerInfo();
-        String remoteSessionId = session.getRemoteSessionId();
+        ContainerInfo containerInfo = seleniumSession.getContainerInfo();
+        String remoteSessionId = seleniumSession.getRemoteSessionId();
 
         String pathForContainer = relativePath.replace(hubSessionId, remoteSessionId);
 
@@ -226,13 +219,13 @@ public class SessionService {
     }
 
     public String uploadFileToSession(String hubSessionId, String base64EncodedZip) {
-        Session session = activeSessionsService.get(hubSessionId);
-        if (session == null) {
+        SeleniumSession seleniumSession = activeSessionsService.get(hubSessionId);
+        if (seleniumSession == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found: " + hubSessionId);
         }
 
         try {
-            return containerManagerService.copyFileToContainer(session.getContainerInfo().getContainerId(), base64EncodedZip);
+            return containerManagerService.copyFileToContainer(seleniumSession.getContainerInfo().getContainerId(), base64EncodedZip);
         } catch (IOException e) {
             log.error("Failed to upload file to session {}", hubSessionId, e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to process file for upload", e);
@@ -240,11 +233,11 @@ public class SessionService {
     }
 
     public Closeable streamLogsForSession(String hubSessionId, ResultCallback<Frame> callback) {
-        Session session = activeSessionsService.get(hubSessionId);
-        if (session == null) {
+        SeleniumSession seleniumSession = activeSessionsService.get(hubSessionId);
+        if (seleniumSession == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found: " + hubSessionId);
         }
-        return containerManagerService.streamContainerLogs(session.getContainerInfo().getContainerId(), callback);
+        return containerManagerService.streamContainerLogs(seleniumSession.getContainerInfo().getContainerId(), callback);
     }
 
     private void dispatchStatusUpdate() {

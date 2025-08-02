@@ -9,17 +9,15 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 @Data
-public class SessionPair {
+public class PlaywrightSession extends Session {
 
     private final WebSocketSession clientSession;
     private volatile WebSocketClient containerClient;
     private final Object lock = new Object();
     private volatile boolean connectionToContainerEstablished = false;
     private final Queue<WebSocketMessage<?>> pendingMessages = new ConcurrentLinkedQueue<>();
-    private ContainerInfo container;
-    private String version;
 
-    public SessionPair(WebSocketSession clientSession) {
+    public PlaywrightSession(WebSocketSession clientSession) {
         this.clientSession = clientSession;
     }
 }

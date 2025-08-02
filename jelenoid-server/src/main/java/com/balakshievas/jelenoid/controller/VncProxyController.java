@@ -1,6 +1,6 @@
 package com.balakshievas.jelenoid.controller;
 
-import com.balakshievas.jelenoid.dto.Session;
+import com.balakshievas.jelenoid.dto.SeleniumSession;
 import com.balakshievas.jelenoid.service.ActiveSessionsService;
 import com.balakshievas.jelenoid.websocket.VncProxySocketHandler;
 import jakarta.servlet.http.HttpServletRequest;
@@ -40,15 +40,15 @@ public class VncProxyController {
         ServerHttpRequest httpRequest = new ServletServerHttpRequest(request);
         ServerHttpResponse httpResponse = new ServletServerHttpResponse(response);
 
-        Session session = activeSessionsService.get(sessionId);
+        SeleniumSession seleniumSession = activeSessionsService.get(sessionId);
 
-        if (session == null) {
+        if (seleniumSession == null) {
             log.error("VNC: Session {} not found.", sessionId);
             response.sendError(HttpStatus.NOT_FOUND.value(), "Session not found");
             return;
         }
 
-        WebSocketHandler vncHandler = new VncProxySocketHandler(session.getContainerInfo());
+        WebSocketHandler vncHandler = new VncProxySocketHandler(seleniumSession.getContainerInfo());
 
         var attributes = new HashMap<String, Object>();
         attributes.put("sessionId", sessionId);

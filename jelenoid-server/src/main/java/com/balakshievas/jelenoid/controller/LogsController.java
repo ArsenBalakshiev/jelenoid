@@ -28,19 +28,15 @@ public class LogsController {
     @GetMapping(path = "/{sessionId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter streamLogs(@PathVariable String sessionId) {
         log.info("Starting log stream for session: {}", sessionId);
-        // Создаем SseEmitter с очень большим таймаутом
         SseEmitter emitter = new SseEmitter(Long.MAX_VALUE);
 
-        // Создаем callback, который будет пересылать логи в SseEmitter
         ResultCallback.Adapter<Frame> callback = new ResultCallback.Adapter<>() {
             @Override
             public void onNext(Frame frame) {
                 try {
-                    // Отправляем данные клиенту в формате SSE
                     emitter.send(SseEmitter.event().data(frame.toString()));
                 } catch (IOException e) {
                     log.warn("Failed to send log event for session {}, closing stream.", sessionId, e);
-                    // Если клиент отключился, завершаем эмиттер
                     emitter.completeWithError(e);
                 }
             }
@@ -58,10 +54,8 @@ public class LogsController {
             }
         };
 
-        // Запускаем стриминг и получаем объект для его закрытия
         Closeable logStream = sessionService.streamLogsForSession(sessionId, callback);
 
-        // Регистрируем обработчики на случай, если клиент закроет соединение или будет таймаут
         emitter.onCompletion(() -> closeStream(logStream, "completion"));
         emitter.onTimeout(() -> closeStream(logStream, "timeout"));
         emitter.onError(e -> closeStream(logStream, "error"));
