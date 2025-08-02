@@ -1,7 +1,7 @@
 package com.balakshievas.jelenoid.controller;
 
 import com.balakshievas.jelenoid.dto.ContainerInfo;
-import com.balakshievas.jelenoid.dto.Session;
+import com.balakshievas.jelenoid.dto.SeleniumSession;
 import com.balakshievas.jelenoid.service.ActiveSessionsService;
 import com.balakshievas.jelenoid.websocket.DevToolsProxySocketHandler;
 import jakarta.servlet.http.HttpServletRequest;
@@ -45,20 +45,20 @@ public class DevToolsProxyController {
     public void proxyDevTools(@PathVariable String sessionId, HttpServletRequest request, HttpServletResponse response)
             throws Exception {
 
-        Session session = activeSessionsService.get(sessionId);
-        if (session == null) {
+        SeleniumSession seleniumSession = activeSessionsService.get(sessionId);
+        if (seleniumSession == null) {
             response.sendError(HttpStatus.NOT_FOUND.value(), "Session not found");
             return;
         }
 
-        ContainerInfo containerInfo = session.getContainerInfo();
+        ContainerInfo containerInfo = seleniumSession.getContainerInfo();
         if (containerInfo == null) {
             response.sendError(HttpStatus.NOT_FOUND.value(), "Container for session not found");
             return;
         }
 
         URI targetUri = UriComponentsBuilder.fromUriString("ws://" + containerInfo.getContainerName() + ":7070")
-                .path("/devtools/page/" + session.getRemoteSessionId())
+                .path("/devtools/page/" + seleniumSession.getRemoteSessionId())
                 .build().toUri();
 
         log.info("Attempting to upgrade request for session {} to WebSocket, proxying to {}", sessionId, targetUri);

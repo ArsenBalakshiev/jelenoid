@@ -1,7 +1,7 @@
 package com.balakshievas.jelenoid.websocket.playwright;
 
 import com.balakshievas.jelenoid.config.TaskExecutorConfig;
-import com.balakshievas.jelenoid.dto.SessionPair;
+import com.balakshievas.jelenoid.dto.PlaywrightSession;
 import com.balakshievas.jelenoid.dto.StatusChangedEvent;
 import com.balakshievas.jelenoid.service.ActiveSessionsService;
 import com.balakshievas.jelenoid.service.playwright.PlaywrightDockerService;
@@ -55,7 +55,7 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
-        SessionPair pair = new SessionPair(session);
+        PlaywrightSession pair = new PlaywrightSession(session);
         activeSessionsService.putPlaywrightActiveSession(session, pair);
         log.info("Session {}: Connection received.", session.getId());
 
@@ -75,24 +75,24 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
         publisher.publishEvent(new StatusChangedEvent());
     }
 
-    private void startProxyForSession(WebSocketSession session, SessionPair pair) {
+    private void startProxyForSession(WebSocketSession session, PlaywrightSession pair) {
         proxyExecutor.submit(() -> {
             try {
                 String playwrightContainerVersion = getPlaywrightVersion(session);
 
                 if (playwrightContainerVersion != null) {
-                    pair.setContainer(playwrightDockerService.startPlaywrightContainer(playwrightContainerVersion));
+                    pair.setContainerInfo(playwrightDockerService.startPlaywrightContainer(playwrightContainerVersion));
                     pair.setVersion(playwrightContainerVersion);
                 } else {
-                    pair.setContainer(playwrightDockerService.startPlaywrightContainer(defaultPlaywrightVersion));
+                    pair.setContainerInfo(playwrightDockerService.startPlaywrightContainer(defaultPlaywrightVersion));
                     pair.setVersion(defaultPlaywrightVersion);
                 }
-                if (pair.getContainer() == null) {
+                if (pair.getContainerInfo() == null) {
                     throw new RuntimeException("Failed to start a new Playwright container.");
                 }
 
                 log.info("Session {}: Started new container {} at address {}",
-                        session.getId(), pair.getContainer().getContainerId(), pair.getContainer().getContainerName());
+                        session.getId(), pair.getContainerInfo().getContainerId(), pair.getContainerInfo().getContainerName());
 
                 WebSocketClient containerClient = createContainerClient(pair);
                 pair.setContainerClient(containerClient);
@@ -103,7 +103,6 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
                     publisher.publishEvent(new StatusChangedEvent());
                     return;
                 }
-
                 publisher.publishEvent(new StatusChangedEvent());
             } catch (Exception e) {
                 log.error("Session {}: Failed to start proxy task.", session.getId(), e);
@@ -115,8 +114,8 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
         });
     }
 
-    private WebSocketClient createContainerClient(SessionPair pair) {
-        URI containerUri = URI.create("ws://" + pair.getContainer().getContainerName() + ":" + playwrightPort);
+    private WebSocketClient createContainerClient(PlaywrightSession pair) {
+        URI containerUri = URI.create("ws://" + pair.getContainerInfo().getContainerName() + ":" + playwrightPort);
 
         Map<String, String> headersToForward = new HashMap<>();
         pair.getClientSession().getHandshakeHeaders().forEach((key, values) -> {
@@ -162,8 +161,8 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
                         pair.getClientSession().getId(), code, reason);
                 closeSessionSilently(pair.getClientSession(), new CloseStatus(code, reason));
                 proxyExecutor.submit(() -> {
-                    playwrightDockerService.stopContainer(pair.getContainer().getContainerId());
-                    pair.setContainer(null);
+                    playwrightDockerService.stopContainer(pair.getContainerInfo().getContainerId());
+                    pair.setContainerInfo(null);
                 });
                 publisher.publishEvent(new StatusChangedEvent());
             }
@@ -181,21 +180,21 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         log.info("Session {}: Client connection closed with status {}.", session.getId(), status.getCode());
 
-        SessionPair removedPair = activeSessionsService.removePlaywrightActiveSession(session);
+        PlaywrightSession removedPair = activeSessionsService.removePlaywrightActiveSession(session);
         boolean stateChanged = false;
 
         if (removedPair != null) {
             stateChanged = true;
-            if (removedPair.getContainer() != null) {
+            if (removedPair.getContainerInfo() != null) {
                 log.info("Session {}: Cleaning up dedicated container {}.", session.getId(),
-                        removedPair.getContainer().getContainerId());
+                        removedPair.getContainerInfo().getContainerId());
                 proxyExecutor.submit(() -> {
-                    playwrightDockerService.stopContainer(removedPair.getContainer().getContainerId());
-                    removedPair.setContainer(null);
+                    playwrightDockerService.stopContainer(removedPair.getContainerInfo().getContainerId());
+                    removedPair.setContainerInfo(null);
                 });
             }
 
-            SessionPair nextPair = activeSessionsService.pollFromPlaywrightQueue();
+            PlaywrightSession nextPair = activeSessionsService.pollFromPlaywrightQueue();
             if (nextPair != null) {
                 log.info("Session {}: Slot is being passed to queued session {}.", session.getId(),
                         nextPair.getClientSession().getId());
@@ -234,11 +233,11 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void processWebSocketMessage(WebSocketSession session, WebSocketMessage<?> message) {
-        SessionPair pair = activeSessionsService.getPlaywrightActiveSession(session);
+        PlaywrightSession pair = activeSessionsService.getPlaywrightActiveSession(session);
         if (pair == null) return;
         synchronized (pair.getLock()) {
-            if (pair.getContainer() != null) {
-                pair.getContainer().updateActivity();
+            if (pair.getContainerInfo() != null) {
+                pair.getContainerInfo().updateActivity();
             }
             if (pair.isConnectionToContainerEstablished()) {
                 if (message instanceof TextMessage)
@@ -251,7 +250,7 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
-    private void sendToClient(SessionPair pair, WebSocketMessage<?> message) {
+    private void sendToClient(PlaywrightSession pair, WebSocketMessage<?> message) {
         try {
             if (pair.getClientSession().isOpen()) {
                 synchronized (pair.getClientSession()) {
@@ -279,7 +278,7 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
     public void checkSessionTimeouts() {
         long now = System.currentTimeMillis();
         activeSessionsService.getPlaywrightActiveSessions().forEach((session, pair) -> {
-            if (pair.getContainer() != null && (now - pair.getContainer().getLastActivity()) > sessionTimeoutMillis) {
+            if (pair.getContainerInfo() != null && (now - pair.getContainerInfo().getLastActivity()) > sessionTimeoutMillis) {
                 log.warn("Session {} timed out due to inactivity. Closing connection.", session.getId());
                 closeSessionSilently(session, CloseStatus.SESSION_NOT_RELIABLE);
                 publisher.publishEvent(new StatusChangedEvent());
@@ -293,9 +292,9 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
         proxyExecutor.shutdownNow();
         activeSessionsService.getPlaywrightActiveSessions().values().forEach(pair -> {
             closeSessionSilently(pair.getClientSession(), CloseStatus.GOING_AWAY);
-            if (pair.getContainer() != null) {
-                playwrightDockerService.stopContainer(pair.getContainer().getContainerId());
-                pair.setContainer(null);
+            if (pair.getContainerInfo() != null) {
+                playwrightDockerService.stopContainer(pair.getContainerInfo().getContainerId());
+                pair.setContainerInfo(null);
             }
         });
         activeSessionsService.clearPlaywrightWaitingQueue();

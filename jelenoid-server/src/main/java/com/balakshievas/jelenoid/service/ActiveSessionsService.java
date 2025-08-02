@@ -2,8 +2,8 @@ package com.balakshievas.jelenoid.service;
 
 import com.balakshievas.jelenoid.config.TaskExecutorConfig;
 import com.balakshievas.jelenoid.dto.PendingRequest;
-import com.balakshievas.jelenoid.dto.Session;
-import com.balakshievas.jelenoid.dto.SessionPair;
+import com.balakshievas.jelenoid.dto.SeleniumSession;
+import com.balakshievas.jelenoid.dto.PlaywrightSession;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
@@ -38,7 +38,7 @@ public class ActiveSessionsService {
     @Value("${jelenoid.timeouts.queue}")
     private long queueTimeoutMillis;
 
-    private final Map<String, Session> seleniumActiveSessions = new ConcurrentHashMap<>();
+    private final Map<String, SeleniumSession> seleniumActiveSessions = new ConcurrentHashMap<>();
     private BlockingQueue<PendingRequest> seleniumPendingRequests;
     private final AtomicInteger seleniumSessionsInProgress = new AtomicInteger(0);
 
@@ -49,8 +49,8 @@ public class ActiveSessionsService {
     @Value("${jelenoid.playwright.queue_limit}")
     private int playwrightQueueLimit;
 
-    private BlockingQueue<SessionPair> playwrightWaitingQueue;
-    private final ConcurrentHashMap<WebSocketSession, SessionPair> playwrightActiveSessions = new ConcurrentHashMap<>();
+    private BlockingQueue<PlaywrightSession> playwrightWaitingQueue;
+    private final ConcurrentHashMap<WebSocketSession, PlaywrightSession> playwrightActiveSessions = new ConcurrentHashMap<>();
 
     private Semaphore playwrightSemaphore;
 
@@ -82,21 +82,21 @@ public class ActiveSessionsService {
         log.info("Slot released. Total in-progress: {}/{}", current, seleniumSessionLimit);
     }
 
-    public void sessionSuccessfullyCreated(String hubSessionId, Session session) {
-        seleniumActiveSessions.put(hubSessionId, session);
+    public void sessionSuccessfullyCreated(String hubSessionId, SeleniumSession seleniumSession) {
+        seleniumActiveSessions.put(hubSessionId, seleniumSession);
         log.info("Session {} is now active. Active (real): {}, Total in-progress: {}",
                 hubSessionId, seleniumActiveSessions.size(), seleniumSessionsInProgress.get());
     }
 
-    public Session sessionDeleted(String hubSessionId) {
-        Session session = seleniumActiveSessions.remove(hubSessionId);
-        if (session != null) {
+    public SeleniumSession sessionDeleted(String hubSessionId) {
+        SeleniumSession seleniumSession = seleniumActiveSessions.remove(hubSessionId);
+        if (seleniumSession != null) {
             releaseSlot();
         }
-        return session;
+        return seleniumSession;
     }
 
-    public Session get(String sessionId) { return seleniumActiveSessions.get(sessionId); }
+    public SeleniumSession get(String sessionId) { return seleniumActiveSessions.get(sessionId); }
     public boolean offerToQueue(PendingRequest pendingRequest) { return seleniumPendingRequests.offer(pendingRequest); }
     public PendingRequest pollFromQueue() { return seleniumPendingRequests.poll(); }
     public int getQueueSize() { return seleniumPendingRequests.size(); }
@@ -107,12 +107,12 @@ public class ActiveSessionsService {
     @Async(TaskExecutorConfig.SESSION_TASK_EXECUTOR)
     public void checkInactiveSessions() {
         seleniumActiveSessions.entrySet().removeIf(entry -> {
-            Session session = entry.getValue();
-            if (System.currentTimeMillis() - session.getLastActivity() > sessionTimeoutMillis) {
+            SeleniumSession seleniumSession = entry.getValue();
+            if (System.currentTimeMillis() - seleniumSession.getLastActivity() > sessionTimeoutMillis) {
                 log.warn("Session {} has timed out. Releasing slot and stopping container {}.",
-                        session.getHubSessionId(), session.getContainerInfo().getContainerId());
+                        seleniumSession.getHubSessionId(), seleniumSession.getContainerInfo().getContainerId());
                 releaseSlot();
-                containerManagerService.stopContainer(session.getContainerInfo().getContainerId());
+                containerManagerService.stopContainer(seleniumSession.getContainerInfo().getContainerId());
                 sessionService.processQueue();
                 return true;
             }
@@ -142,7 +142,7 @@ public class ActiveSessionsService {
         seleniumSessionsInProgress.set(0);
     }
 
-    public Map<String, Session> getSeleniumActiveSessions() {
+    public Map<String, SeleniumSession> getSeleniumActiveSessions() {
         return seleniumActiveSessions;
     }
 
@@ -158,15 +158,15 @@ public class ActiveSessionsService {
         return seleniumPendingRequests.size();
     }
 
-    public boolean offerPlaywrightQueue(SessionPair sessionPair) {
-        return playwrightWaitingQueue.offer(sessionPair);
+    public boolean offerPlaywrightQueue(PlaywrightSession playwrightSession) {
+        return playwrightWaitingQueue.offer(playwrightSession);
     }
 
-    public SessionPair pollFromPlaywrightQueue() {
+    public PlaywrightSession pollFromPlaywrightQueue() {
         return playwrightWaitingQueue.poll();
     }
 
-    public boolean removeFromPlaywrightQueueIf(Predicate<SessionPair> filter) {
+    public boolean removeFromPlaywrightQueueIf(Predicate<PlaywrightSession> filter) {
         return playwrightWaitingQueue.removeIf(filter);
     }
 
@@ -174,15 +174,15 @@ public class ActiveSessionsService {
         playwrightWaitingQueue.clear();
     }
 
-    public SessionPair putPlaywrightActiveSession(WebSocketSession session, SessionPair sessionPair) {
-        return playwrightActiveSessions.put(session, sessionPair);
+    public PlaywrightSession putPlaywrightActiveSession(WebSocketSession session, PlaywrightSession playwrightSession) {
+        return playwrightActiveSessions.put(session, playwrightSession);
     }
 
-    public SessionPair removePlaywrightActiveSession(WebSocketSession session) {
+    public PlaywrightSession removePlaywrightActiveSession(WebSocketSession session) {
         return playwrightActiveSessions.remove(session);
     }
 
-    public SessionPair getPlaywrightActiveSession(WebSocketSession session) {
+    public PlaywrightSession getPlaywrightActiveSession(WebSocketSession session) {
         return playwrightActiveSessions.get(session);
     }
 
@@ -194,11 +194,11 @@ public class ActiveSessionsService {
         return playwrightQueueLimit;
     }
 
-    public BlockingQueue<SessionPair> getPlaywrightWaitingQueue() {
+    public BlockingQueue<PlaywrightSession> getPlaywrightWaitingQueue() {
         return playwrightWaitingQueue;
     }
 
-    public ConcurrentHashMap<WebSocketSession, SessionPair> getPlaywrightActiveSessions() {
+    public ConcurrentHashMap<WebSocketSession, PlaywrightSession> getPlaywrightActiveSessions() {
         return playwrightActiveSessions;
     }
 

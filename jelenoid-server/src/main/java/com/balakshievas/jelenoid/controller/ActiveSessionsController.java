@@ -1,7 +1,7 @@
 package com.balakshievas.jelenoid.controller;
 
 import com.balakshievas.jelenoid.dto.PendingRequest;
-import com.balakshievas.jelenoid.dto.Session;
+import com.balakshievas.jelenoid.dto.SeleniumSession;
 import com.balakshievas.jelenoid.service.ActiveSessionsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,7 +19,7 @@ public class ActiveSessionsController {
     private ActiveSessionsService activeSessionsService;
 
     @GetMapping("/sessions")
-    public Map<String, Session> getAllSessions() {
+    public Map<String, SeleniumSession> getAllSessions() {
         return activeSessionsService.getSeleniumActiveSessions();
     }
 
