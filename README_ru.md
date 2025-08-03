@@ -89,6 +89,11 @@ docker build -t suomessa/jelenoid:server-latest .\jelenoid-server\
 docker build -t suomessa/jelenoid:ui-latest .\jelenoid-ui\.
 ```
 
+Сборка образа метрик:
+```shell
+docker build -t suomessa/jelenoid:metrics-latest .\service-metrics\.
+```
+
 Demo nginx для тестов:
 ```shell
 docker run -d --name mynginx -p 8080:80 nginx

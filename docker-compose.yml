@@ -7,12 +7,28 @@ services:
     ports:
       - "4444:4444"
       - "5005:5005"
+    environment:
+      - NATS_SERVER=nats://nats:4222
     volumes:
       - ./jelenoid-server/src:/app/src
       - ./jelenoid-server/target:/app/target
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - jelenoid-net
+
+  metrics-service:
+    build: ./service-metrics
+    container_name: metrics-service
+    depends_on:
+      - nats
+      - jelenoid-server
+    environment:
+      NATS_URL: nats://nats:4222
+      POSTGRES_URL:  jdbc:postgresql://postgres:5432/metrics
+      POSTGRES_USER: metrics-user
+      POSTGRES_PASSWORD: metrics-password
+
+
   jelenoid-ui:
     image: node:20-alpine
     container_name: jelenoid-ui
@@ -29,8 +45,34 @@ services:
     depends_on:
       - jelenoid-server
 
+  nats:
+    image: nats:2.10
+    container_name: nats
+    networks:
+      - jelenoid-net
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: |
+      -js
+      -m 8222
+      -sd /data/jetstream
+    volumes:
+      - nats_data:/data/jetstream
+
+  metrics-db:
+    image: postgres:16
+    container_name: metrics-db
+    environment:
+      POSTGRES_DB: metrics
+      POSTGRES_USER: metrics-user
+      POSTGRES_PASSWORD: metrics-password
+    ports: [ "5432:5432" ]
 
 networks:
   jelenoid-net:
     name: jelenoid-net
-    driver: bridge
+
+volumes:
+  nats_data: {}
+

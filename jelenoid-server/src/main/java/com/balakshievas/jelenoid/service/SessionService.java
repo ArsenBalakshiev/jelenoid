@@ -1,5 +1,6 @@
 package com.balakshievas.jelenoid.service;
 
+import com.balakshievas.jelenoid.config.SessionPublisher;
 import com.balakshievas.jelenoid.config.TaskExecutorConfig;
 import com.balakshievas.jelenoid.dto.*;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -55,6 +56,8 @@ public class SessionService {
     private Executor taskExecutor;
     @Autowired
     private ApplicationEventPublisher publisher;
+    @Autowired
+    private SessionPublisher sessionEventPublisher;
 
     @Async
     @Scheduled(fixedRate = 5000)
@@ -144,6 +147,11 @@ public class SessionService {
             log.info("Advertising 'se:cdp' endpoint: {}", devToolsUrl);
 
             responseValue.put("sessionId", hubSessionId);
+
+            SessionInfo sessionInfo = sessionEventPublisher
+                    .createSessionAndPublish("selenium", browserInfo.getVersion());
+            seleniumSession.setSessionInfo(sessionInfo);
+
             return Map.of("value", responseValue);
 
         } catch (Exception e) {
@@ -158,6 +166,7 @@ public class SessionService {
         dispatchStatusUpdate();
         if (seleniumSession != null) {
             containerManagerService.stopContainer(seleniumSession.getContainerInfo().getContainerId());
+            sessionEventPublisher.endSessionByRemoteAndPublish(seleniumSession.getSessionInfo());
             processQueue();
         }
     }

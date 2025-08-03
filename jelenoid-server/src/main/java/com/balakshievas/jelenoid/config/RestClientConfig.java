@@ -21,23 +21,17 @@ public class RestClientConfig {
 
     @Bean
     public RestClient restClient() {
-        // Настраиваем менеджер пула соединений
         PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
         connectionManager.setMaxTotal(100); // Максимальное число соединений в пуле
         connectionManager.setDefaultMaxPerRoute(20); // Максимальное число соединений к одному хосту
 
-        // Эта опция говорит клиенту проверять, не "умерло" ли соединение, перед тем как его использовать.
-        // Это может немного замедлить работу, но решает проблему Connection reset.
         connectionManager.setValidateAfterInactivity(TimeValue.ofSeconds(5));
 
-        // Собираем HTTP-клиент с нашим менеджером соединений
         CloseableHttpClient httpClient = HttpClients.custom()
                 .setConnectionManager(connectionManager)
-                // Отключаем стандартный механизм повторных попыток, чтобы управлять ими самим
                 .disableAutomaticRetries()
                 .build();
 
-        // Создаем RequestFactory на основе нашего кастомного клиента
         var requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
         requestFactory.setConnectionRequestTimeout(Duration.ofSeconds(5)); // Таймаут на получение соединения из пула
         requestFactory.setConnectTimeout(Duration.ofSeconds(5)); // Таймаут на установку TCP-соединения

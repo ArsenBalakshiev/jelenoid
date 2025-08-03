@@ -37,6 +37,7 @@ jelenoid:
     default_version: ${PLAYWRIGHT_DEFAULT_VERSION:1.53.1}
     max_sessions: ${PLAYWRIGHT_SESSION_LIMIT:10}
     queue_limit: ${PLAYWRIGHT_QUEUE_LIMIT:100}
+  nats-server: ${NATS_SERVER:}
 
 management:
   endpoint:
