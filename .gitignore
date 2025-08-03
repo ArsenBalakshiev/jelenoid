@@ -86,3 +86,4 @@ jelenoid-ui/pnpm-debug.log*
 # Файлы с секретами, которые могут появиться в будущем
 secrets/
 *.json.secret
+/service-metrics/target/

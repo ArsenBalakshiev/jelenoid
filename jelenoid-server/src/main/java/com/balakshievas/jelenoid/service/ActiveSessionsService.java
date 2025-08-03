@@ -1,5 +1,6 @@
 package com.balakshievas.jelenoid.service;
 
+import com.balakshievas.jelenoid.config.SessionPublisher;
 import com.balakshievas.jelenoid.config.TaskExecutorConfig;
 import com.balakshievas.jelenoid.dto.PendingRequest;
 import com.balakshievas.jelenoid.dto.SeleniumSession;
@@ -56,6 +57,8 @@ public class ActiveSessionsService {
 
     @Autowired
     private ContainerManagerService containerManagerService;
+    @Autowired
+    private SessionPublisher sessionEventPublisher;
 
     @Lazy
     @Autowired
@@ -113,6 +116,7 @@ public class ActiveSessionsService {
                         seleniumSession.getHubSessionId(), seleniumSession.getContainerInfo().getContainerId());
                 releaseSlot();
                 containerManagerService.stopContainer(seleniumSession.getContainerInfo().getContainerId());
+                sessionEventPublisher.endInactiveSessionAndPublish(seleniumSession.getSessionInfo());
                 sessionService.processQueue();
                 return true;
             }
@@ -136,6 +140,7 @@ public class ActiveSessionsService {
         log.info("Shutting down... stopping all {} active containers.", seleniumActiveSessions.size());
         seleniumActiveSessions.values().parallelStream().forEach(session -> {
             containerManagerService.stopContainer(session.getContainerInfo().getContainerId());
+            sessionEventPublisher.cleanupSessionAndPublish(session.getSessionInfo());
         });
         seleniumActiveSessions.clear();
         seleniumPendingRequests.clear();

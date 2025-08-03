@@ -88,6 +88,11 @@ To build the UI image:
 docker build -t suomessa/jelenoid:ui-latest .\jelenoid-ui\.
 ```
 
+To build the metrics image:
+```shell
+docker build -t suomessa/jelenoid:metrics-latest .\service-metrics\.
+```
+
 Demo nginx for tests:
 ```shell
 docker run -d --name mynginx -p 8080:80 nginx

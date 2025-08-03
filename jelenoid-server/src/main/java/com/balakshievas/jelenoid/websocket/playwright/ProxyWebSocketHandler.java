@@ -24,10 +24,8 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
-import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -57,8 +55,6 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
     @Autowired
     private ApplicationEventPublisher publisher;
 
-    @Autowired
-    private SessionPublisher sessionPublisher;
     @Autowired
     private SessionPublisher sessionEventPublisher;
 
@@ -95,6 +91,7 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
                 } else {
                     pair.setContainerInfo(playwrightDockerService.startPlaywrightContainer(defaultPlaywrightVersion));
                     pair.setVersion(defaultPlaywrightVersion);
+                    playwrightContainerVersion = defaultPlaywrightVersion;
                 }
                 if (pair.getContainerInfo() == null) {
                     throw new RuntimeException("Failed to start a new Playwright container.");
@@ -113,19 +110,9 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
                     return;
                 }
 
-                SessionInfo sessionInfo = new SessionInfo(
-                        UUID.randomUUID().toString(),
-                        LocalDateTime.now(),
-                        null,
-                        "playwright",
-                        playwrightContainerVersion,
-                        "started",
-                        null
-                );
-
+                SessionInfo sessionInfo = sessionEventPublisher
+                        .createSessionAndPublish("playwright", playwrightContainerVersion);
                 pair.setSessionInfo(sessionInfo);
-
-                sessionEventPublisher.publish(sessionInfo);
 
                 publisher.publishEvent(new StatusChangedEvent());
             } catch (Exception e) {
@@ -188,14 +175,7 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
                     playwrightDockerService.stopContainer(pair.getContainerInfo().getContainerId());
                     pair.setContainerInfo(null);
                 });
-                SessionInfo sessionInfo = pair.getSessionInfo();
-                sessionInfo.setEndTime(LocalDateTime.now());
-                sessionInfo.setStatus("ended");
-                sessionInfo.setEndedBy("playwright onClose");
-
-                pair.setSessionInfo(sessionInfo);
-
-                sessionEventPublisher.publish(sessionInfo);
+                sessionEventPublisher.endSessionByRemoteAndPublish(pair.getSessionInfo());
                 publisher.publishEvent(new StatusChangedEvent());
             }
 
@@ -203,16 +183,7 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
             public void onError(Exception ex) {
                 log.error("Session {}: Error in container connection.", pair.getClientSession().getId(), ex);
                 closeSessionSilently(pair.getClientSession(), CloseStatus.SERVER_ERROR);
-
-                SessionInfo sessionInfo = pair.getSessionInfo();
-                sessionInfo.setEndTime(LocalDateTime.now());
-                sessionInfo.setStatus("ended by error");
-                sessionInfo.setEndedBy("playwright onError");
-
-                pair.setSessionInfo(sessionInfo);
-
-                sessionEventPublisher.publish(sessionInfo);
-
+                sessionEventPublisher.errorSessionAndPublish(pair.getSessionInfo());
                 publisher.publishEvent(new StatusChangedEvent());
             }
         };
@@ -323,6 +294,7 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
             if (pair.getContainerInfo() != null && (now - pair.getContainerInfo().getLastActivity()) > sessionTimeoutMillis) {
                 log.warn("Session {} timed out due to inactivity. Closing connection.", session.getId());
                 closeSessionSilently(session, CloseStatus.SESSION_NOT_RELIABLE);
+                sessionEventPublisher.endInactiveSessionAndPublish(pair.getSessionInfo());
                 publisher.publishEvent(new StatusChangedEvent());
             }
         });
@@ -336,6 +308,7 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
             closeSessionSilently(pair.getClientSession(), CloseStatus.GOING_AWAY);
             if (pair.getContainerInfo() != null) {
                 playwrightDockerService.stopContainer(pair.getContainerInfo().getContainerId());
+                sessionEventPublisher.cleanupSessionAndPublish(pair.getSessionInfo());
                 pair.setContainerInfo(null);
             }
         });
