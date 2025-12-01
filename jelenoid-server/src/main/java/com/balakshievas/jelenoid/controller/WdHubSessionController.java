@@ -3,11 +3,13 @@ package com.balakshievas.jelenoid.controller;
 import com.balakshievas.jelenoid.service.SessionService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.InputStream;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -30,16 +32,18 @@ public class WdHubSessionController {
     }
 
     @RequestMapping("/session/{sessionId}/**")
-    public ResponseEntity<byte[]> proxy(
+    public ResponseEntity<Resource> proxy(
             @PathVariable String sessionId,
             HttpMethod method,
             HttpServletRequest request,
             @RequestHeader HttpHeaders headers,
-            @RequestBody(required = false) byte[] body) {
+            InputStream bodyStream
+    ) {
 
         String fullPath = request.getRequestURI();
-        String relativePath = fullPath.substring("/wd/hub".length());
-        return sessionService.proxyRequest(sessionId, method, relativePath, headers, body);
+        String relativePath = fullPath.substring("/wd/hub".length()); // Убедись, что префикс правильный
+
+        return sessionService.proxyRequest(sessionId, method, relativePath, headers, bodyStream);
     }
 
     @PostMapping({"/session/{sessionId}/se/file", "/session/{sessionId}/file"})

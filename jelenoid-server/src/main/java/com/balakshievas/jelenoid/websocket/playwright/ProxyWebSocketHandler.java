@@ -44,7 +44,7 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
     @Value("${jelenoid.playwright.default_version}")
     private String defaultPlaywrightVersion;
 
-    private final ExecutorService proxyExecutor = Executors.newCachedThreadPool();
+    private final ExecutorService proxyExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     @Autowired
     private ActiveSessionsService activeSessionsService;
@@ -266,8 +266,11 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
     private void sendToClient(PlaywrightSession pair, WebSocketMessage<?> message) {
         try {
             if (pair.getClientSession().isOpen()) {
-                synchronized (pair.getClientSession()) {
+                pair.getSessionLock().lock();
+                try {
                     pair.getClientSession().sendMessage(message);
+                } finally {
+                    pair.getSessionLock().unlock();
                 }
             }
         } catch (IOException e) {
