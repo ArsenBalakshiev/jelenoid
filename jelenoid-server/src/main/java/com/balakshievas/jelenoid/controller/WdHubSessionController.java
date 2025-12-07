@@ -41,7 +41,7 @@ public class WdHubSessionController {
     ) {
 
         String fullPath = request.getRequestURI();
-        String relativePath = fullPath.substring("/wd/hub".length()); // Убедись, что префикс правильный
+        String relativePath = fullPath.substring("/wd/hub".length());
 
         return sessionService.proxyRequest(sessionId, method, relativePath, headers, bodyStream);
     }

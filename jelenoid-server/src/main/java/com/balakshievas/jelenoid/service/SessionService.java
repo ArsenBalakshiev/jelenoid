@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.*;
@@ -238,14 +239,11 @@ public class SessionService {
         }
 
         return requestSpec.exchange((req, res) -> {
-            InputStream responseStream = res.getBody();
-            InputStreamResource resource = (responseStream != null)
-                    ? new InputStreamResource(responseStream)
-                    : null;
+            byte[] bodyBytes = res.getBody().readAllBytes();
 
             return ResponseEntity.status(res.getStatusCode())
                     .headers(res.getHeaders())
-                    .body(resource);
+                    .body(new ByteArrayResource(bodyBytes));
         });
     }
 

@@ -1,0 +1,70 @@
+services:
+  jelenoid-server:
+    image: suomessa/jelenoid:server-latest
+    container_name: jelenoid-server
+    ports:
+      - "4444:4444"
+    volumes:
+      - "./browsers.json:/app/browsers.json:ro"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    environment:
+      - PARALLEL_SESSIONS=10
+      - QUEUE_LIMIT=100
+      - DOCKER_NETWORK=jelenoid-net
+      - BROWSERS_FILE=/app/browsers.json
+      - QUEUE_TIMEOUT=30000
+      - SESSION_TIMEOUT=600000
+      - STARTUP_TIMEOUT=30000
+      - CLEANUP_TIMEOUT=15000
+      - CONTAINER_STARTING_TIMEOUT=60000
+      - UI_HOSTS_LIST=http://localhost:80,http://localhost
+      - PLAYWRIGHT_PORT=3000
+      - PLAYWRIGHT_DEFAULT_VERSION=1.53.1
+      - PLAYWRIGHT_SESSION_LIMIT=10
+      - PLAYWRIGHT_QUEUE_LIMIT=100
+      - NATS_SERVER=nats://nats:4222
+    networks:
+      - jelenoid-net
+
+  jelenoid-server-vt:
+    image: suomessa/jelenoid:server-vt
+    container_name: jelenoid-server-vt
+    ports:
+      - "4445:4444"
+      - "5005:5005"
+    environment:
+      - PARALLEL_SESSIONS=10
+      - QUEUE_LIMIT=100
+      - DOCKER_NETWORK=jelenoid-net
+      - BROWSERS_FILE=/app/browsers.json
+      - QUEUE_TIMEOUT=30000
+      - SESSION_TIMEOUT=600000
+      - STARTUP_TIMEOUT=30000
+      - CLEANUP_TIMEOUT=15000
+      - CONTAINER_STARTING_TIMEOUT=60000
+      - UI_HOSTS_LIST=http://localhost:80,http://localhost
+      - PLAYWRIGHT_PORT=3000
+      - PLAYWRIGHT_DEFAULT_VERSION=1.53.1
+      - PLAYWRIGHT_SESSION_LIMIT=10
+      - PLAYWRIGHT_QUEUE_LIMIT=100
+      - NATS_SERVER=nats://nats:4222
+    volumes:
+      - "./browsers.json:/app/browsers.json:ro"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    networks:
+      - jelenoid-net
+
+  selenoid:
+    network_mode: bridge
+    image: devawpshko/selenoid:custom
+    container_name: selenoid
+    volumes:
+      - "./browsers.json:/etc/selenoid/browsers.json"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    command: [ "-conf", "/etc/selenoid/browsers.json" ]
+    ports:
+      - "4446:4444"
+
+networks:
+  jelenoid-net:
+    name: jelenoid-net
