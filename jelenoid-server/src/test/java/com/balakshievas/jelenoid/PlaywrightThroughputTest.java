@@ -77,7 +77,7 @@ public class PlaywrightThroughputTest {
     @Test
     @DisplayName("Playwright WebSocket Proxy Throughput Benchmark")
     void benchmarkThroughput() {
-        Assumptions.assumeTrue(activePages.size() > 0, "No active sessions to test!");
+        Assumptions.assumeTrue(!activePages.isEmpty(), "No active sessions to test!");
 
         System.out.println("Starting stress test: " + (activePages.size() * COMMANDS_PER_SESSION) + " total commands...");
 
