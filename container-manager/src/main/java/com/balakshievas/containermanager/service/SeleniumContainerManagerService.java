@@ -1,8 +1,8 @@
-package com.balakshievas.jelenoid.service;
+package com.balakshievas.containermanager.service;
 
-import com.balakshievas.jelenoid.dto.ContainerInfo;
+import com.balakshievas.containermanager.dto.ContainerInfo;
+import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerResponse;
-import com.github.dockerjava.api.exception.NotModifiedException;
 import com.github.dockerjava.api.model.HostConfig;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,16 +16,19 @@ import java.util.Map;
 import java.util.UUID;
 
 @Service
-public class ContainerManagerService extends AbstractDockerService {
+public class SeleniumContainerManagerService extends AbstractDockerService {
 
     private final RestClient restClient = RestClient.builder().build();
 
-    public ContainerManagerService() {
-        super(LoggerFactory.getLogger(ContainerManagerService.class));
+    public SeleniumContainerManagerService(DockerClient dockerClient,
+                                           @Value("${jelenoid.docker.network:jelenoid-net}") String dockerNetworkName,
+                                           @Value("${jelenoid.timeouts.cleanup}") int containerStopTimeout,
+                                           @Value("${jelenoid.timeouts.starting_timeout}") int containerStartTimeout) {
+        super(dockerClient, dockerNetworkName, containerStopTimeout, containerStartTimeout,
+                LoggerFactory.getLogger(SeleniumContainerManagerService.class));
     }
 
-    public ContainerInfo startContainer(String image, boolean isVncEnabled, boolean isVideoEnabled,
-                                        boolean isLogEnabled, String videoName, String logName) {
+    public ContainerInfo startContainer(String image, boolean isVncEnabled) {
 
         String hubSessionId = UUID.randomUUID().toString();
 
@@ -77,7 +80,7 @@ public class ContainerManagerService extends AbstractDockerService {
                 }
             } catch (Exception e) {
                 try {
-                    Thread.sleep(1000); // Небольшая пауза перед следующей попыткой
+                    Thread.sleep(1000);
                 } catch (InterruptedException interruptedException) {
                     Thread.currentThread().interrupt();
                     throw new IllegalStateException("Health check was interrupted", interruptedException);
