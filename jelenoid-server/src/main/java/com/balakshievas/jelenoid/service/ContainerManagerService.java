@@ -12,6 +12,7 @@ import org.springframework.web.client.RestClient;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -41,7 +42,8 @@ public class ContainerManagerService extends AbstractDockerService {
 
         HostConfig hostConfig = HostConfig.newHostConfig()
                 .withNetworkMode(dockerNetworkName)
-                .withShmSize(2_147_483_648L);
+                .withShmSize(2_147_483_648L)
+                .withTmpFs(Map.of("/tmp", "rw,noexec,nosuid,size=1g"));
 
         List<String> envVars = new ArrayList<>();
         if (isVncEnabled) {

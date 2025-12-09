@@ -2,6 +2,9 @@ server:
   port: ${JELENOID_PORT:4444}
 
 spring:
+  threads:
+    virtual:
+      enabled: true
   mvc:
     async:
       request-timeout: 500000
@@ -27,10 +30,6 @@ jelenoid:
     startup: ${STARTUP_TIMEOUT:30000}
     cleanup: ${CLEANUP_TIMEOUT:15000}
     starting_timeout: ${CONTAINER_STARTING_TIMEOUT:60000}
-  executor:
-    core-pool-size: ${EXECUTOR_POOL_SIZE:5}
-    max-pool-size: ${EXECUTOR_MAX_POOL_SIZE:10}
-    queue-capacity: ${EXECUTOR_QUEUE_CAPACITY:100}
   ui_hosts: ${UI_HOSTS_LIST:http://localhost:3000,http://localhost:4444}
   playwright:
     port: ${PLAYWRIGHT_PORT:3000}

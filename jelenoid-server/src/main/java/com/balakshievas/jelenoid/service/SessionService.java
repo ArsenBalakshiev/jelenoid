@@ -13,6 +13,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
 import org.springframework.http.*;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -23,11 +26,14 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+
+import static com.balakshievas.jelenoid.utils.Utils.*;
 
 @Service
 public class SessionService {
@@ -121,11 +127,14 @@ public class SessionService {
                     .retrieve()
                     .toEntity(String.class);
 
-            Map<String, Object> responseBody = objectMapper.readValue(response.getBody(), new TypeReference<>() {});
-            Map<String, Object> responseValue = (Map<String, Object>) responseBody.get("value");
-            String remoteSessionId = (String) responseValue.get("sessionId");
+            Map<String, Object> responseBody = objectMapper.readValue(response.getBody(), new TypeReference<>() {
+            });
+            Map<String, Object> responseValue = getMap(responseBody, "value", Map.of());
+            String remoteSessionId = getString(responseValue, "sessionId");
 
-            if (remoteSessionId == null) {throw new IllegalStateException("Container did not return a session ID");}
+            if (remoteSessionId == null) {
+                throw new IllegalStateException("Container did not return a session ID");
+            }
 
             String hubSessionId = UUID.randomUUID().toString();
             SeleniumSession seleniumSession = new SeleniumSession(hubSessionId, remoteSessionId, containerInfo,
@@ -134,9 +143,9 @@ public class SessionService {
 
             dispatchStatusUpdate();
 
-            Map<String, Object> containerCapabilities = (Map<String, Object>) responseValue.get("capabilities");
+            Map<String, Object> containerCapabilities = getMap(responseValue, "capabilities", Map.of());
             if (containerCapabilities.containsKey("goog:chromeOptions")) {
-                Map<String, Object> chromeOptions = (Map<String, Object>) containerCapabilities.get("goog:chromeOptions");
+                Map<String, Object> chromeOptions = getMap(containerCapabilities, "goog:chromeOptions", Map.of());
                 if (chromeOptions.remove("debuggerAddress") != null) {
                     log.info("Removed 'debuggerAddress' from capabilities to prevent client-side conflicts.");
                 }
@@ -155,7 +164,9 @@ public class SessionService {
             return Map.of("value", responseValue);
 
         } catch (Exception e) {
-            if (containerInfo != null) {containerManagerService.stopContainer(containerInfo.getContainerId());}
+            if (containerInfo != null) {
+                containerManagerService.stopContainer(containerInfo.getContainerId());
+            }
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Failed to create session in container", e);
         }
@@ -195,7 +206,8 @@ public class SessionService {
         }
     }
 
-    public ResponseEntity<byte[]> proxyRequest(String hubSessionId, HttpMethod method, String relativePath, HttpHeaders headers, byte[] body) {
+    public ResponseEntity<Resource> proxyRequest(String hubSessionId, HttpMethod method, String relativePath,
+                                                 HttpHeaders headers, InputStream bodyStream) {
         SeleniumSession seleniumSession = activeSessionsService.get(hubSessionId);
 
         if (seleniumSession == null) {
@@ -205,9 +217,7 @@ public class SessionService {
         seleniumSession.updateActivity();
 
         ContainerInfo containerInfo = seleniumSession.getContainerInfo();
-        String remoteSessionId = seleniumSession.getRemoteSessionId();
-
-        String pathForContainer = relativePath.replace(hubSessionId, remoteSessionId);
+        String pathForContainer = relativePath.replace(hubSessionId, seleniumSession.getRemoteSessionId());
 
         URI targetUri = UriComponentsBuilder
                 .fromUriString("http://" + containerInfo.getContainerName() + ":4444")
@@ -215,16 +225,35 @@ public class SessionService {
                 .build(true)
                 .toUri();
 
-        RestClient.RequestBodySpec requestSpec = restClient
+        var requestSpec = restClient
                 .method(method)
                 .uri(targetUri)
-                .headers(httpHeaders -> httpHeaders.addAll(headers));
+                .headers(httpHeaders -> headers.forEach((key, values) -> {
+                    if (!isRestrictedHeader(key)) {
+                        httpHeaders.addAll(key, values);
+                    }
+                }));
 
-        if (body != null && body.length > 0) {
-            requestSpec.body(body);
+        if (bodyStream != null && method != HttpMethod.GET) {
+            requestSpec.body(new InputStreamResource(bodyStream));
         }
 
-        return requestSpec.retrieve().toEntity(byte[].class);
+        return requestSpec.exchange((req, res) -> {
+            byte[] bodyBytes = res.getBody().readAllBytes();
+
+            return ResponseEntity.status(res.getStatusCode())
+                    .headers(res.getHeaders())
+                    .body(new ByteArrayResource(bodyBytes));
+        });
+    }
+
+    private boolean isRestrictedHeader(String headerName) {
+        String name = headerName.toLowerCase();
+        return name.equals("content-length") ||
+                name.equals("transfer-encoding") ||
+                name.equals("host") ||
+                name.equals("connection") ||
+                name.equals("upgrade");
     }
 
     public String uploadFileToSession(String hubSessionId, String base64EncodedZip) {
@@ -254,9 +283,9 @@ public class SessionService {
     }
 
     private BrowserInfo findImageForRequest(Map<String, Object> requestBody) {
-        Map<String, Object> capabilitiesRequest = (Map<String, Object>) requestBody.get("capabilities");
-        Map<String, Object> alwaysMatch = (Map<String, Object>) capabilitiesRequest.getOrDefault("alwaysMatch", Collections.emptyMap());
-        List<Map<String, Object>> firstMatch = (List<Map<String, Object>>) capabilitiesRequest.getOrDefault("firstMatch", List.of(Collections.emptyMap()));
+        Map<String, Object> capabilitiesRequest = getMap(requestBody, "capabilities", Map.of());
+        Map<String, Object> alwaysMatch = getMap(capabilitiesRequest, "alwaysMatch", Map.of());
+        List<Map<String, Object>> firstMatch = getListOfMaps(capabilitiesRequest, "firstMatch", List.of());
 
         for (Map<String, Object> firstMatchOption : firstMatch) {
             Map<String, Object> mergedCapabilities = new HashMap<>(alwaysMatch);
@@ -279,20 +308,18 @@ public class SessionService {
 
     private Map<String, Object> findSelenoidOptions(Map<String, Object> requestBody) {
         try {
-            Map<String, Object> capabilities = (Map<String, Object>) requestBody.get("capabilities");
+            Map<String, Object> capabilities = getMap(requestBody, "capabilities", Map.of());
             if (capabilities == null) return Collections.emptyMap();
 
-            Map<String, Object> alwaysMatch = (Map<String, Object>) capabilities.get("alwaysMatch");
+            Map<String, Object> alwaysMatch = getMap(capabilities, "alwaysMatch", Map.of());
             if (alwaysMatch != null && alwaysMatch.get("selenoid:options") instanceof Map) {
-                return (Map<String, Object>) alwaysMatch.get("selenoid:options");
+                return getMap(alwaysMatch, "selenoid:options", Map.of());
             }
 
-            List<Map<String, Object>> firstMatchList = (List<Map<String, Object>>) capabilities.get("firstMatch");
-            if (firstMatchList != null) {
-                for (Map<String, Object> match : firstMatchList) {
-                    if (match != null && match.get("selenoid:options") instanceof Map) {
-                        return (Map<String, Object>) match.get("selenoid:options");
-                    }
+            List<Map<String, Object>> firstMatchList = getListOfMaps(capabilities, "firstMatch", List.of());
+            for (Map<String, Object> match : firstMatchList) {
+                if (match != null && match.get("selenoid:options") instanceof Map) {
+                    return getMap(match, "selenoid:options", Map.of());
                 }
             }
         } catch (Exception e) {
