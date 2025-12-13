@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.InputStream;
+import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -56,7 +57,14 @@ public class WdHubSessionController {
             return ResponseEntity.badRequest().build();
         }
 
-        String filePathInContainer = sessionService.uploadFileToSession(sessionId, base64EncodedZip);
+        byte[] fileBytes;
+        try {
+            fileBytes = Base64.getDecoder().decode(base64EncodedZip);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        String filePathInContainer = sessionService.uploadFileToSession(sessionId, fileBytes);
         return ResponseEntity.ok(Map.of("value", filePathInContainer));
     }
 }

@@ -9,9 +9,24 @@ services:
       - "5005:5005"
     environment:
       - NATS_SERVER=nats://nats:4222
+      - BROWSERS_FILE=/app/browsers.json
+      - CONTAINER_MANAGER_ADDRESS=http://container-manager:8080
     volumes:
+      - ./browsers.json:/app/browsers.json:ro
       - ./jelenoid-server/src:/app/src
       - ./jelenoid-server/target:/app/target
+    networks:
+      - jelenoid-net
+
+  container-manager:
+    build: ./container-manager
+    container_name: container-manager
+    ports:
+      - "8080:8080"
+      - "5006:5005"
+    volumes:
+      - ./container-manager/src:/app/src
+      - ./container-manager/target:/app/target
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - jelenoid-net

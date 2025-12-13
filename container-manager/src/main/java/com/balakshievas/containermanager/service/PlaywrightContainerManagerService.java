@@ -1,6 +1,7 @@
 package com.balakshievas.containermanager.service;
 
 import com.balakshievas.containermanager.dto.ContainerInfo;
+import com.balakshievas.containermanager.exception.NoImageException;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.model.Capability;
@@ -8,9 +9,11 @@ import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.HostConfig;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 
 import java.util.UUID;
 
+@Service
 public class PlaywrightContainerManagerService extends AbstractDockerService {
 
     @Value("${jelenoid.playwright.port}")
@@ -29,7 +32,7 @@ public class PlaywrightContainerManagerService extends AbstractDockerService {
         String imageName = "mcr.microsoft.com/playwright:v" + playwrightVersion;
 
         if (!imageExists(imageName)) {
-            throw new RuntimeException("There is no playwright image with name " + imageName);
+            throw new NoImageException("There is no playwright image with name " + imageName);
         }
 
         String containerName = "jelenoid-playwright-" + UUID.randomUUID().toString().substring(0, 8);

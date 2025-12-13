@@ -7,8 +7,7 @@ import com.github.dockerjava.api.model.Frame;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.slf4j.Logger;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -18,7 +17,7 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.file.Path;
 import java.util.Arrays;
-import java.util.Base64;
+import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 public abstract class AbstractDockerService {
@@ -41,7 +40,7 @@ public abstract class AbstractDockerService {
         this.log = log;
     }
 
-    public void stopContainer(String containerId) {
+    public boolean stopContainer(String containerId) {
         try {
             log.info("Stopping and removing container {}", containerId);
             try {
@@ -50,13 +49,16 @@ public abstract class AbstractDockerService {
                         .exec();
             } catch (NotModifiedException e) {
                 log.info("Container {} already stopped", containerId);
+                return false;
             }
             dockerClient.removeContainerCmd(containerId).exec();
+            return true;
         } catch (Exception e) {
             log.error("Failed to stop/remove container {}: {}", containerId, e.getMessage());
         } finally {
             log.debug("Container stop permit released for {}.", containerId);
         }
+        return false;
     }
 
     protected boolean imageExists(String imageName) {
@@ -89,47 +91,107 @@ public abstract class AbstractDockerService {
         return isServiceReady;
     }
 
-    public Closeable streamContainerLogs(String containerId, ResultCallback<Frame> callback) {
-        return dockerClient.logContainerCmd(containerId)
+    public SseEmitter streamContainerLogs(String containerId) {
+
+        SseEmitter emitter = new SseEmitter(Long.MAX_VALUE);
+
+        ResultCallback<Frame> frameResultCallback = new ResultCallback.Adapter<Frame>() {
+            @Override
+            public void onNext(Frame item) {
+                try {
+                    String payload = new String(item.getPayload());
+                    if (payload.isBlank()) {
+                        return;
+                    }
+                    emitter.send(payload.trim());
+                } catch (IOException e) {
+                    onError(e);
+                }
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+                emitter.completeWithError(throwable);
+            }
+
+            @Override
+            public void onComplete() {
+                emitter.complete();
+            }
+        };
+
+        Closeable containerLogsStream = dockerClient.logContainerCmd(containerId)
                 .withStdOut(true)
                 .withStdErr(true)
                 .withTailAll()
                 .withFollowStream(true)
-                .exec(callback);
+                .exec(frameResultCallback);
+
+        emitter.onCompletion(() -> {
+            try {
+                containerLogsStream.close();
+            } catch (IOException e) {
+            }
+        });
+        emitter.onTimeout(() -> {
+            try {
+                containerLogsStream.close();
+            } catch (IOException e) {
+            }
+            emitter.complete();
+        });
+
+        return emitter;
     }
 
-    public String copyFileToContainer(String containerId, String base64EncodedZip) throws IOException {
-        byte[] zipBytes = Base64.getDecoder().decode(base64EncodedZip);
+    public String copyFileToContainer(String containerId, byte[] rawBytes) throws IOException {
+        String fileName = null;
+        byte[] fileContent = null;
 
-        String fileName;
-        byte[] fileContent;
-
-        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
-            var zipEntry = zis.getNextEntry();
-            if (zipEntry == null) {
-                throw new IOException("Invalid ZIP archive: no entries found.");
+        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(rawBytes))) {
+            ZipEntry zipEntry;
+            while ((zipEntry = zis.getNextEntry()) != null) {
+                if (zipEntry.isDirectory()) {
+                    continue;
+                }
+                fileName = Path.of(zipEntry.getName()).getFileName().toString();
+                fileContent = zis.readAllBytes();
+                break;
             }
-            fileName = Path.of(zipEntry.getName()).getFileName().toString();
-            fileContent = zis.readAllBytes();
+        }
+
+        if (fileName == null || fileContent == null) {
+            throw new IOException("ZIP archive is empty or contains only directories.");
         }
 
         ByteArrayOutputStream tarOutputStream = new ByteArrayOutputStream();
         try (TarArchiveOutputStream tos = new TarArchiveOutputStream(tarOutputStream)) {
+            tos.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
+
             TarArchiveEntry tarEntry = new TarArchiveEntry(fileName);
             tarEntry.setSize(fileContent.length);
+            tarEntry.setMode(0644);
+
             tos.putArchiveEntry(tarEntry);
             tos.write(fileContent);
             tos.closeArchiveEntry();
+            tos.finish();
+        } catch (IOException e) {
+            throw new IOException("Failed to create TAR archive", e);
         }
-        byte[] tarBytes = tarOutputStream.toByteArray();
 
-        dockerClient.copyArchiveToContainerCmd(containerId)
-                .withTarInputStream(new ByteArrayInputStream(tarBytes))
-                .withRemotePath("/tmp/")
-                .exec();
+        try {
+            dockerClient.copyArchiveToContainerCmd(containerId)
+                    .withTarInputStream(new ByteArrayInputStream(tarOutputStream.toByteArray()))
+                    .withRemotePath("/")
+                    .exec();
+        } catch (Exception e) {
+            log.error("Docker copy failed for container {}", containerId, e);
+            throw new IOException("Failed to copy file to container: " + e.getMessage(), e);
+        }
 
-        String filePathInContainer = "/tmp/" + fileName;
-        log.info("File {} successfully uploaded to container {} at path {}", fileName, containerId, filePathInContainer);
+        String filePathInContainer = "/" + fileName;
+        log.info("File {} uploaded to {}", fileName, filePathInContainer);
 
         return filePathInContainer;
     }

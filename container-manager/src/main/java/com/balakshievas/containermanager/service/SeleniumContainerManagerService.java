@@ -1,6 +1,7 @@
 package com.balakshievas.containermanager.service;
 
 import com.balakshievas.containermanager.dto.ContainerInfo;
+import com.balakshievas.containermanager.exception.NoImageException;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.model.HostConfig;
@@ -29,6 +30,10 @@ public class SeleniumContainerManagerService extends AbstractDockerService {
     }
 
     public ContainerInfo startContainer(String image, boolean isVncEnabled) {
+
+        if (!imageExists(image)) {
+            throw new NoImageException("There is no playwright image with name " + image);
+        }
 
         String hubSessionId = UUID.randomUUID().toString();
 
