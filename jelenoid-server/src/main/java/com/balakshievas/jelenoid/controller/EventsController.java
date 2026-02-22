@@ -15,7 +15,7 @@ public class EventsController {
 
     @GetMapping(path = "/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter subscribe() {
-        SseEmitter emitter = new SseEmitter(Long.MAX_VALUE); // Создаем эмиттер с длинным таймаутом
+        SseEmitter emitter = new SseEmitter(Long.MAX_VALUE);
         emitterService.addEmitter(emitter);
         return emitter;
     }

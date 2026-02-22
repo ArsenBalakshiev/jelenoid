@@ -69,16 +69,14 @@ public class RestClientConfig {
         }
 
         RequestConfig requestConfig = RequestConfig.custom()
-                .setConnectTimeout(Timeout.of(3000, TimeUnit.MILLISECONDS)) // 3 сек на коннект
-                .setResponseTimeout(Timeout.of(0, TimeUnit.SECONDS)) // Бесконечное ожидание данных (важно для SSE)
+                .setConnectTimeout(Timeout.of(3000, TimeUnit.MILLISECONDS))
+                .setResponseTimeout(Timeout.of(0, TimeUnit.SECONDS))
                 .build();
 
-        // 2. Создаем Apache HttpClient с этой конфигурацией
         CloseableHttpClient httpClient = HttpClients.custom()
                 .setDefaultRequestConfig(requestConfig)
                 .build();
 
-        // 3. Создаем фабрику Spring, используя этот клиент
         HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
 
         return builder

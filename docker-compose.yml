@@ -22,7 +22,6 @@ services:
     build: ./container-manager
     container_name: container-manager
     ports:
-      - "8080:8080"
       - "5006:5005"
     volumes:
       - ./container-manager/src:/app/src

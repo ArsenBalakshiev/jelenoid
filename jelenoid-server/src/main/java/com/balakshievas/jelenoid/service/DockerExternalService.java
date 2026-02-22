@@ -116,23 +116,18 @@ public class DockerExternalService {
                         .uri("/api/containers/" + containerId + "/logs")
                         .accept(MediaType.TEXT_EVENT_STREAM)
                         .exchange((req, resp) -> {
-                            // Проверка статуса
                             if (resp.getStatusCode().isError()) {
                                 throw new RuntimeException("Upstream Error: " + resp.getStatusCode());
                             }
 
                             InputStream inputStream = resp.getBody();
 
-                            // ВАЖНО: Используем маленький буфер, чтобы данные летели сразу
                             byte[] buffer = new byte[1024];
                             int bytesRead;
 
-                            // Читаем из источника
                             while ((bytesRead = inputStream.read(buffer)) != -1) {
-                                // Пишем клиенту
                                 outputStream.write(buffer, 0, bytesRead);
 
-                                // КРИТИЧНО: Принудительно отправляем данные в сеть
                                 outputStream.flush();
                             }
                             return null;
