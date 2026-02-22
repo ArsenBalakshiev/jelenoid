@@ -56,7 +56,7 @@ public class ActiveSessionsService {
     private Semaphore playwrightSemaphore;
 
     @Autowired
-    private ContainerManagerService containerManagerService;
+    private DockerExternalService dockerExternalService;
     @Autowired
     private SessionPublisher sessionEventPublisher;
 
@@ -115,7 +115,7 @@ public class ActiveSessionsService {
                 log.warn("Session {} has timed out. Releasing slot and stopping container {}.",
                         seleniumSession.getHubSessionId(), seleniumSession.getContainerInfo().getContainerId());
                 releaseSlot();
-                containerManagerService.stopContainer(seleniumSession.getContainerInfo().getContainerId());
+                dockerExternalService.stopContainer(seleniumSession.getContainerInfo().getContainerId());
                 sessionEventPublisher.endInactiveSessionAndPublish(seleniumSession.getSessionInfo());
                 sessionService.processQueue();
                 return true;
@@ -139,7 +139,7 @@ public class ActiveSessionsService {
     public void cleanup() {
         log.info("Shutting down... stopping all {} active containers.", seleniumActiveSessions.size());
         seleniumActiveSessions.values().parallelStream().forEach(session -> {
-            containerManagerService.stopContainer(session.getContainerInfo().getContainerId());
+            dockerExternalService.stopContainer(session.getContainerInfo().getContainerId());
             sessionEventPublisher.cleanupSessionAndPublish(session.getSessionInfo());
         });
         seleniumActiveSessions.clear();

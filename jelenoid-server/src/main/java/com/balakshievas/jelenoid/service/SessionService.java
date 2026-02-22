@@ -5,8 +5,6 @@ import com.balakshievas.jelenoid.config.TaskExecutorConfig;
 import com.balakshievas.jelenoid.dto.*;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.dockerjava.api.async.ResultCallback;
-import com.github.dockerjava.api.model.Frame;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,10 +20,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import org.springframework.web.util.UriComponentsBuilder;
 
-import java.io.Closeable;
-import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.time.Instant;
@@ -52,7 +49,7 @@ public class SessionService {
     @Autowired
     private ActiveSessionsService activeSessionsService;
     @Autowired
-    private ContainerManagerService containerManagerService;
+    private DockerExternalService dockerExternalService;
     @Autowired
     private RestClient restClient;
     @Autowired
@@ -104,11 +101,6 @@ public class SessionService {
         Map<String, Object> selenoidOptions = findSelenoidOptions(requestBody);
 
         boolean enableVnc = getBooleanOption(selenoidOptions, "enableVNC");
-        boolean enableVideo = getBooleanOption(selenoidOptions, "enableVideo");
-        boolean enableLog = getBooleanOption(selenoidOptions, "enableLog");
-
-        String videoName = getStringOption(selenoidOptions, "videoName");
-        String logName = getStringOption(selenoidOptions, "logName");
 
         if (browserInfo == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Not found images for your browser");
@@ -116,8 +108,7 @@ public class SessionService {
 
         ContainerInfo containerInfo = null;
         try {
-            containerInfo = containerManagerService.startContainer(browserInfo.getDockerImageName(), enableVnc, enableVideo, enableLog,
-                    videoName, logName);
+            containerInfo = dockerExternalService.startSeleniumContainer(browserInfo.getDockerImageName(), enableVnc);
 
             String createSessionUrl = "http://" + containerInfo.getContainerName() + ":4444/session";
             ResponseEntity<String> response = restClient.post()
@@ -165,7 +156,7 @@ public class SessionService {
 
         } catch (Exception e) {
             if (containerInfo != null) {
-                containerManagerService.stopContainer(containerInfo.getContainerId());
+                dockerExternalService.stopContainer(containerInfo.getContainerId());
             }
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Failed to create session in container", e);
@@ -176,7 +167,7 @@ public class SessionService {
         SeleniumSession seleniumSession = activeSessionsService.sessionDeleted(hubSessionId);
         dispatchStatusUpdate();
         if (seleniumSession != null) {
-            containerManagerService.stopContainer(seleniumSession.getContainerInfo().getContainerId());
+            dockerExternalService.stopContainer(seleniumSession.getContainerInfo().getContainerId());
             sessionEventPublisher.endSessionByRemoteAndPublish(seleniumSession.getSessionInfo());
             processQueue();
         }
@@ -256,26 +247,22 @@ public class SessionService {
                 name.equals("upgrade");
     }
 
-    public String uploadFileToSession(String hubSessionId, String base64EncodedZip) {
+    public String uploadFileToSession(String hubSessionId, byte[] fileBytes) {
         SeleniumSession seleniumSession = activeSessionsService.get(hubSessionId);
         if (seleniumSession == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found: " + hubSessionId);
         }
 
-        try {
-            return containerManagerService.copyFileToContainer(seleniumSession.getContainerInfo().getContainerId(), base64EncodedZip);
-        } catch (IOException e) {
-            log.error("Failed to upload file to session {}", hubSessionId, e);
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to process file for upload", e);
-        }
+        return dockerExternalService
+                .copyFileToContainer(seleniumSession.getContainerInfo().getContainerId(), fileBytes);
     }
 
-    public Closeable streamLogsForSession(String hubSessionId, ResultCallback<Frame> callback) {
+    public StreamingResponseBody streamLogsForSession(String hubSessionId) {
         SeleniumSession seleniumSession = activeSessionsService.get(hubSessionId);
         if (seleniumSession == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found: " + hubSessionId);
         }
-        return containerManagerService.streamContainerLogs(seleniumSession.getContainerInfo().getContainerId(), callback);
+        return dockerExternalService.streamContainerLogs(seleniumSession.getContainerInfo().getContainerId());
     }
 
     private void dispatchStatusUpdate() {

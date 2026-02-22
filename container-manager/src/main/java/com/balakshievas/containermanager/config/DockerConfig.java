@@ -1,4 +1,4 @@
-package com.balakshievas.jelenoid.config;
+package com.balakshievas.containermanager.config;
 
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.core.DefaultDockerClientConfig;

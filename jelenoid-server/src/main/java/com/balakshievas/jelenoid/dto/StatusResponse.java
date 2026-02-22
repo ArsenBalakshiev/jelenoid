@@ -21,8 +21,8 @@ public class StatusResponse {
         private final int used;
         private final int queued;
         private final int inProgress;
-        private final List<SeleniumSession> seleniumSessions;
-        private final List<QueuedRequestInfo> queuedRequests;
+        private final List<SeleniumSession> activeSeleniumSessions;
+        private final List<QueuedRequestInfo> queuedSeleniumSession;
     }
 
     @Data

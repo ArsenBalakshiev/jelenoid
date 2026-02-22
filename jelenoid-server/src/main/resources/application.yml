@@ -12,28 +12,21 @@ spring:
     name: jelenoid
 
 jelenoid:
+  container-manager:
+    address: ${CONTAINER_MANAGER_ADDRESS:http://localhost:8080}
   limit: ${PARALLEL_SESSIONS:10}
   queue:
     limit: ${QUEUE_LIMIT:100}
-  logs:
-    dir: ${LOG_OUTPUT_DIR:/logs}
-  video:
-    dir: ${VIDEO_OUTPUT_DIR:/videos}
-    recorder-image: ${RECORDER_IMAGE:selenoid/video-recorder:latest-release}
-  docker:
-    network: ${DOCKER_NETWORK:jelenoid-net}
   browsers:
-    config-dir: ${BROWSERS_FILE:/tmp/jelenoid/browsers.json}
+    config-dir: ${BROWSERS_FILE:browsers.json}
   timeouts:
     queue: ${QUEUE_TIMEOUT:30000}
     session: ${SESSION_TIMEOUT:600000}
     startup: ${STARTUP_TIMEOUT:30000}
-    cleanup: ${CLEANUP_TIMEOUT:15000}
-    starting_timeout: ${CONTAINER_STARTING_TIMEOUT:60000}
   ui_hosts: ${UI_HOSTS_LIST:http://localhost:3000,http://localhost:4444}
   playwright:
     port: ${PLAYWRIGHT_PORT:3000}
-    default_version: ${PLAYWRIGHT_DEFAULT_VERSION:1.53.1}
+    default_version: ${PLAYWRIGHT_DEFAULT_VERSION:1.53.0}
     max_sessions: ${PLAYWRIGHT_SESSION_LIMIT:10}
     queue_limit: ${PLAYWRIGHT_QUEUE_LIMIT:100}
   nats-server: ${NATS_SERVER:}
@@ -44,7 +37,7 @@ management:
       show-details: always
       group:
         custom:
-          include: diskSpace,docker
+          include: diskSpace
   endpoints:
     web:
       exposure:

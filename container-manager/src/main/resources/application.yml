@@ -1,0 +1,33 @@
+server:
+  port: ${CONTAINER_MANAGER_PORT:8080}
+
+spring:
+  threads:
+    virtual:
+      enabled: true
+  mvc:
+    async:
+      request-timeout: 500000
+  application:
+    name: container-manager
+
+jelenoid:
+  playwright:
+    port: ${PLAYWRIGHT_PORT:3000}
+  docker:
+    network: ${DOCKER_NETWORK:jelenoid-net}
+  timeouts:
+    cleanup: ${CLEANUP_TIMEOUT:15000}
+    starting_timeout: ${CONTAINER_STARTING_TIMEOUT:60000}
+
+management:
+  endpoint:
+    health:
+      show-details: always
+      group:
+        custom:
+          include: diskSpace,docker
+  endpoints:
+    web:
+      exposure:
+        include: health,info

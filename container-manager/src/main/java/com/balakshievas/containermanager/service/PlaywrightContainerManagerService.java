@@ -1,7 +1,8 @@
-package com.balakshievas.jelenoid.service.playwright;
+package com.balakshievas.containermanager.service;
 
-import com.balakshievas.jelenoid.dto.ContainerInfo;
-import com.balakshievas.jelenoid.service.AbstractDockerService;
+import com.balakshievas.containermanager.dto.ContainerInfo;
+import com.balakshievas.containermanager.exception.NoImageException;
+import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.model.Capability;
 import com.github.dockerjava.api.model.ExposedPort;
@@ -13,13 +14,17 @@ import org.springframework.stereotype.Service;
 import java.util.UUID;
 
 @Service
-public class PlaywrightDockerService extends AbstractDockerService {
+public class PlaywrightContainerManagerService extends AbstractDockerService {
 
     @Value("${jelenoid.playwright.port}")
     private Integer playwrightPort;
 
-    public PlaywrightDockerService() {
-        super(LoggerFactory.getLogger(PlaywrightDockerService.class));
+    public PlaywrightContainerManagerService(DockerClient dockerClient,
+                                           @Value("${jelenoid.docker.network:jelenoid-net}") String dockerNetworkName,
+                                           @Value("${jelenoid.timeouts.cleanup}") int containerStopTimeout,
+                                           @Value("${jelenoid.timeouts.starting_timeout}") int containerStartTimeout) {
+        super(dockerClient, dockerNetworkName, containerStopTimeout, containerStartTimeout,
+                LoggerFactory.getLogger(PlaywrightContainerManagerService.class));
     }
 
     public ContainerInfo startPlaywrightContainer(String playwrightVersion) {
@@ -27,7 +32,7 @@ public class PlaywrightDockerService extends AbstractDockerService {
         String imageName = "mcr.microsoft.com/playwright:v" + playwrightVersion;
 
         if (!imageExists(imageName)) {
-            throw new RuntimeException("There is no playwright image with name " + imageName);
+            throw new NoImageException("There is no playwright image with name " + imageName);
         }
 
         String containerName = "jelenoid-playwright-" + UUID.randomUUID().toString().substring(0, 8);
@@ -67,4 +72,5 @@ public class PlaywrightDockerService extends AbstractDockerService {
 
         return new ContainerInfo(container.getId(), containerName);
     }
+
 }

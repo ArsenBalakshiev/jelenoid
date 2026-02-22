@@ -10,7 +10,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-
 @Service
 public class EmitterService {
     private static final Logger log = LoggerFactory.getLogger(EmitterService.class);
@@ -18,15 +17,19 @@ public class EmitterService {
 
     public void addEmitter(SseEmitter emitter) {
         emitter.onCompletion(() -> {
-            log.info("Emitter completed, removing from list.");
+            log.debug("Emitter completed, removing from list.");
             this.emitters.remove(emitter);
         });
         emitter.onError(e -> {
-            log.error("Emitter error", e);
+            if (e instanceof IOException) {
+                log.debug("Client disconnected (IOException). Removing emitter.");
+            } else {
+                log.error("Emitter error", e);
+            }
             this.emitters.remove(emitter);
         });
         emitter.onTimeout(() -> {
-            log.warn("Emitter timed out, removing from list.");
+            log.debug("Emitter timed out, removing from list.");
             this.emitters.remove(emitter);
         });
         this.emitters.add(emitter);
@@ -41,15 +44,19 @@ public class EmitterService {
                         .name("state-update")
                         .data(event);
                 emitter.send(eventBuilder);
-            } catch (IOException e) {
-                log.warn("Failed to send event to an emitter. Marking for removal.");
+            } catch (Exception e) { // Ловим Exception, а не только IOException
+                log.debug("Failed to send event to an emitter (client likely disconnected). Marking for removal.");
                 deadEmitters.add(emitter);
+                try {
+                    emitter.complete();
+                } catch (Exception ignored) {
+                }
             }
         }
 
         if (!deadEmitters.isEmpty()) {
             emitters.removeAll(deadEmitters);
-            log.info("Removed {} dead emitters.", deadEmitters.size());
+            log.debug("Removed {} dead emitters.", deadEmitters.size());
         }
     }
 }

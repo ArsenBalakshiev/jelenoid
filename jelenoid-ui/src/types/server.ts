@@ -1,3 +1,4 @@
+
 export interface ContainerInfo {
     containerId: string;
     containerName: string;
@@ -5,34 +6,21 @@ export interface ContainerInfo {
     startTime: string;
 }
 
-export interface SessionInfo {
+export interface SeleniumSession {
     hubSessionId: string;
     remoteSessionId: string;
     containerInfo: ContainerInfo;
     browserName: string;
-    browserVersion: string;
+    version: string;
     vncEnabled: boolean;
+    sessionInfo: any;
     lastActivity: number;
     startTime: string;
 }
 
-export interface QueuedRequest {
-    // Добавьте поля в зависимости от структуры очереди
+export interface QueuedRequestInfo {
+    requestId?: string;
     [key: string]: any;
-}
-
-export interface SessionPainInfo {
-    clientSessionId: string;
-    clientSessionUrl: string;
-    containerClientUrl: string;
-    playwrightVersion: string;
-    containerInfo: ContainerInfo;
-}
-
-export interface ContainerInfo {
-    containerId: string;
-    containerName: string;
-    lastActivity: number;
 }
 
 export interface SeleniumStat {
@@ -40,16 +28,24 @@ export interface SeleniumStat {
     used: number;
     queued: number;
     inProgress: number;
-    sessions: SessionInfo[];
-    queuedRequests: QueuedRequest[];
+    activeSeleniumSessions: SeleniumSession[];
+    queuedSeleniumSession: QueuedRequestInfo[];
+}
+
+export interface SessionPairInfo {
+    clientSessionId: string;
+    clientSessionUrl: string;
+    containerClientUrl: string;
+    playwrightVersion: string;
+    containerInfo: ContainerInfo;
 }
 
 export interface PlaywrightStat {
     maxPlaywrightSessionsSize: number;
     activePlaywrightSessionsSize: number;
     queuedPlaywrightSessionsSize: number;
-    activePlaywrightSessions: SessionPainInfo[];
-    queuedPlaywrightSessions: SessionPainInfo[];
+    activePlaywrightSessions: SessionPairInfo[];
+    queuedPlaywrightSessions: SessionPairInfo[];
 }
 
 export interface ServerState {
@@ -57,17 +53,11 @@ export interface ServerState {
     playwrightStat: PlaywrightStat;
 }
 
-export type SessionKind = 'selenium' | 'playwright';
-
-export interface MonitoringSessionBase {
-    kind: SessionKind;
-}
-
-export interface SeleniumMonitoringSession extends MonitoringSessionBase, SessionInfo {
+export interface SeleniumMonitoringSession extends SeleniumSession {
     kind: 'selenium';
 }
 
-export interface PlaywrightMonitoringSession extends MonitoringSessionBase, SessionPainInfo {
+export interface PlaywrightMonitoringSession extends SessionPairInfo {
     kind: 'playwright';
 }
 

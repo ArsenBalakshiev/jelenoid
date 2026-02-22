@@ -1,40 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { ServerState } from '../../types/server';
 import './Header.css';
 
 interface HeaderProps {
     serverState: ServerState;
+    connectionStatus: 'connecting' | 'connected' | 'disconnected'; // Добавили новый пропс
 }
 
-const Header: React.FC<HeaderProps> = ({ serverState }) => {
-    const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
-
-    useEffect(() => {
-        setConnectionStatus('connecting');
-        const eventSource = new EventSource(
-            `${import.meta.env.VITE_SERVER_BASE_URL.replace(/\/$/, '')}/events`
-        );
-
-        eventSource.onopen = () => {
-            setConnectionStatus('connected');
-        };
-
-        eventSource.onerror = () => {
-            if (eventSource.readyState === EventSource.CLOSED) {
-                setConnectionStatus('disconnected');
-            }
-            eventSource.close();
-        };
-
-        // Очистка
-        return () => {
-            eventSource.close();
-        };
-    }, []);
-
+const Header: React.FC<HeaderProps> = ({ serverState, connectionStatus }) => {
     const selenium = serverState.seleniumStat;
     const playwright = serverState.playwrightStat;
-    const activeSessions = selenium.sessions.length;
+
+    const activeSessions = Array.isArray(selenium.activeSeleniumSessions)
+        ? selenium.activeSeleniumSessions.length
+        : 0;
 
     const getStatusIndicatorClass = () => {
         switch (connectionStatus) {
@@ -61,23 +40,23 @@ const Header: React.FC<HeaderProps> = ({ serverState }) => {
                 <div className="status-divider"></div>
                 <div className="status-item">
                     <span className="status-label">Selenium Queue</span>
-                    <span className="status-value">{selenium.queued}</span>
+                    <span className="status-value">{selenium.queued ?? 0}</span>
                 </div>
                 <div className="status-divider"></div>
                 <div className="status-item">
                     <span className="status-label">Selenium Limit</span>
-                    <span className="status-value">{activeSessions} / {selenium.total}</span>
+                    <span className="status-value">{activeSessions} / {selenium.total ?? 0}</span>
                 </div>
                 <div className="status-divider"></div>
                 <div className="status-item">
                     <span className="status-label">Playwright Queue</span>
-                    <span className="status-value">{playwright.queuedPlaywrightSessionsSize}</span>
+                    <span className="status-value">{playwright.queuedPlaywrightSessionsSize ?? 0}</span>
                 </div>
                 <div className="status-divider"></div>
                 <div className="status-item">
                     <span className="status-label">Playwright Limit</span>
                     <span className="status-value">
-                        {playwright.activePlaywrightSessionsSize} / {playwright.maxPlaywrightSessionsSize}
+                        {playwright.activePlaywrightSessionsSize ?? 0} / {playwright.maxPlaywrightSessionsSize ?? 0}
                     </span>
                 </div>
             </div>
