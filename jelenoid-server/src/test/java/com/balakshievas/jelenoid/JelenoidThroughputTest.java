@@ -10,9 +10,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -46,6 +44,11 @@ public class JelenoidThroughputTest {
                     DesiredCapabilities caps = new DesiredCapabilities();
                     caps.setBrowserName("chrome");
                     caps.setCapability(ChromeOptions.CAPABILITY, options);
+
+                    Map<String, Object> selenoidOptions = new HashMap<>();
+                    selenoidOptions.put("jelenoidToken", "super-secret-password"); // Наш пароль!
+
+                    caps.setCapability("selenoid:options", selenoidOptions);
 
                     WebDriver driver = new RemoteWebDriver(HUB_URL, caps);
                     driver.get("data:text/html,<html><head><title>Benchmark</title></head><body><h1>OK</h1></body></html>");

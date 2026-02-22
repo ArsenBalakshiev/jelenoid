@@ -33,9 +33,9 @@ import java.util.concurrent.Executor;
 import static com.balakshievas.jelenoid.utils.Utils.*;
 
 @Service
-public class SessionService {
+public class SeleniumSessionService {
 
-    private static final Logger log = LoggerFactory.getLogger(SessionService.class);
+    private static final Logger log = LoggerFactory.getLogger(SeleniumSessionService.class);
 
     @Value("${jelenoid.limit}")
     private int sessionLimit;
@@ -43,6 +43,8 @@ public class SessionService {
     private String serverAddress;
     @Value("${server.port:4444}")
     private int serverPort;
+    @Value("${jelenoid.auth.token:}")
+    private String authToken;
 
     @Autowired
     private BrowserManagerService browserManagerService;
@@ -69,6 +71,9 @@ public class SessionService {
     }
 
     public CompletableFuture<Map<String, Object>> createSessionOrQueue(Map<String, Object> requestBody) {
+
+        authorizeSeleniumRequest(requestBody);
+
         if (activeSessionsService.tryReserveSlot()) {
             return CompletableFuture.supplyAsync(() -> createSessionInternal(requestBody), taskExecutor)
                     .whenComplete((result, ex) -> {
@@ -323,6 +328,39 @@ public class SessionService {
     private String getStringOption(Map<String, Object> options, String key) {
         Object value = options.get(key);
         return value instanceof String ? (String) value : null;
+    }
+
+    private void authorizeSeleniumRequest(Map<String, Object> requestBody) {
+        if (authToken == null || authToken.isBlank()) {
+            return;
+        }
+
+        String token = null;
+        Map<String, Object> capabilities = getMap(requestBody, "capabilities", null);
+
+        if (capabilities != null) {
+            Map<String, Object> alwaysMatch = getMap(capabilities, "alwaysMatch", null);
+            if (alwaysMatch != null && alwaysMatch.get("selenoid:options") instanceof Map) {
+                Map<String, Object> options = (Map<String, Object>) alwaysMatch.get("selenoid:options");
+                token = (String) options.remove("jelenoidToken");
+            } else {
+                List<Map<String, Object>> firstMatch = getListOfMaps(capabilities, "firstMatch", List.of());
+                for (Map<String, Object> match : firstMatch) {
+                    if (match != null && match.get("selenoid:options") instanceof Map) {
+                        Map<String, Object> options = (Map<String, Object>) match.get("selenoid:options");
+                        if (options.containsKey("jelenoidToken")) {
+                            token = (String) options.remove("jelenoidToken");
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!authToken.equals(token)) {
+            log.warn("Unauthorized Selenium connection attempt.");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid or missing jelenoidToken in selenoid:options");
+        }
     }
 
 }

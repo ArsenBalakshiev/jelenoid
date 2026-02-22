@@ -10,6 +10,8 @@ import org.openqa.selenium.remote.RemoteWebDriver;
 import java.io.File;
 import java.net.URL;
 import java.nio.file.Files;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -22,8 +24,14 @@ public class FileUploadTest {
         Files.writeString(tempFile.toPath(), "Hello from Jelenoid test!");
         tempFile.deleteOnExit();
 
+        ChromeOptions options = new ChromeOptions();
+        Map<String, Object> selenoidOptions = new HashMap<>();
+        selenoidOptions.put("jelenoidToken", "super-secret-password");
+
+        options.setCapability("selenoid:options", selenoidOptions);
+
         URL hubUrl = new URL("http://localhost:4444/wd/hub");
-        RemoteWebDriver driver = new RemoteWebDriver(hubUrl, new ChromeOptions());
+        RemoteWebDriver driver = new RemoteWebDriver(hubUrl, options);
 
         // ВАЖНО: Устанавливаем FileDetector, чтобы Selenium знал, что нужно загружать файлы
         driver.setFileDetector(new LocalFileDetector());

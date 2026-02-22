@@ -92,8 +92,7 @@ public class JelenoidLoadTest {
             capabilities.setVersion("133");
             capabilities.setCapability(ChromeOptions.CAPABILITY, options);
             Map<String, Object> selenoidOptions = new HashMap<>();
-            selenoidOptions.put("enableVNC", true);
-
+            selenoidOptions.put("jelenoidToken", "super-secret-password");
             capabilities.setCapability("selenoid:options", selenoidOptions);
 
             driver = new RemoteWebDriver(HUB_URL, capabilities);

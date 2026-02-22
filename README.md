@@ -72,6 +72,11 @@ To run the server in Docker (with hot-reload for development):
 docker-compose up -d --build --force-recreate jelenoid-server
 ```
 
+To run the container-manager in Docker (with hot-reload for development):
+```shell
+docker-compose up -d --build --force-recreate container-manager
+```
+
 To run the UI:
 ```shell
 npm run dev --prefix jelenoid-ui

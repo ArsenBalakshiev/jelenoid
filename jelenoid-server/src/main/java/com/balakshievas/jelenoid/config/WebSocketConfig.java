@@ -1,6 +1,7 @@
 package com.balakshievas.jelenoid.config;
 
-import com.balakshievas.jelenoid.websocket.playwright.ProxyWebSocketHandler;
+import com.balakshievas.jelenoid.service.PlaywrightSessionService;
+import com.balakshievas.jelenoid.utils.PlaywrightVersionInterceptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
@@ -12,7 +13,7 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 public class WebSocketConfig implements WebSocketConfigurer {
 
     @Autowired
-    private ProxyWebSocketHandler proxyWebSocketHandler;
+    private PlaywrightSessionService playwrightSessionService;
 
     private final PlaywrightVersionInterceptor playwrightVersionInterceptor = new PlaywrightVersionInterceptor();
 
@@ -20,7 +21,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(
-                        proxyWebSocketHandler,
+                        playwrightSessionService,
                         "/playwright",
                         "/playwright-{ver:[0-9\\.]+}"
                 ).addInterceptors(playwrightVersionInterceptor)

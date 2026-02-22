@@ -36,6 +36,10 @@ class JelenoidIntegrationTest {
         chromeOptions.setCapability("browserName", "chrome");
         chromeOptions.setCapability("browserVersion", "133");
 
+        Map<String, Object> selenoidOptions = new HashMap<>();
+        selenoidOptions.put("jelenoidToken", "super-secret-password-1");
+        chromeOptions.setCapability("selenoid:options", selenoidOptions);
+
         WebDriver driver = null;
         try {
 
@@ -67,6 +71,10 @@ class JelenoidIntegrationTest {
         capabilities.setBrowserName("chrome");
         capabilities.setVersion("133");
         capabilities.setCapability(ChromeOptions.CAPABILITY, chromeOptions);
+
+        Map<String, Object> selenoidOptions = new HashMap<>();
+        selenoidOptions.put("jelenoidToken", "super-secret-password");
+        capabilities.setCapability("selenoid:options", selenoidOptions);
 
         WebDriver driver = null;
         try {
@@ -128,7 +136,7 @@ class JelenoidIntegrationTest {
         capabilities.setCapability(ChromeOptions.CAPABILITY, options);
         Map<String, Object> selenoidOptions = new HashMap<>();
         selenoidOptions.put("enableVNC", true);
-
+        selenoidOptions.put("jelenoidToken", "super-secret-password");
         capabilities.setCapability("selenoid:options", selenoidOptions);
 
         WebDriver driver = null;
