@@ -20,6 +20,7 @@
         <awaitility.version>4.2.2</awaitility.version>
         <java-websocket.version>1.5.4</java-websocket.version>
         <jackson.version>2.18.2</jackson.version>
+        <selenide.version>7.9.1</selenide.version>
     </properties>
 
     <dependencyManagement>
@@ -42,6 +43,13 @@
     </dependencyManagement>
 
     <dependencies>
+
+        <dependency>
+            <groupId>com.codeborne</groupId>
+            <artifactId>selenide</artifactId>
+            <version>${selenide.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

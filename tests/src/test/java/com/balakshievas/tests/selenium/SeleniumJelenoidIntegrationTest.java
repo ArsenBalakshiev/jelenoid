@@ -1,7 +1,6 @@
 package com.balakshievas.tests.selenium;
 
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.openqa.selenium.*;
@@ -120,6 +119,33 @@ class SeleniumJelenoidIntegrationTest extends BaseSeleniumJelenoidTest {
         Assertions.assertTrue(
                 uploadedFiles.getText().contains(tempFile.getName()),
                 "На странице должно отображаться имя загруженного файла"
+        );
+    }
+
+    @Test
+    @DisplayName("проверка работы с некорректной версией браузера")
+    void testIncorrectVersion() {
+        ChromeOptions options = new ChromeOptions();
+        options.addArguments(
+                "--remote-allow-origins=*",
+                "--no-sandbox",
+                "--window-size=1920,1080",
+                "--disable-dev-shm-usage",
+                "--disable-gpu"
+        );
+
+        Map<String, Object> selenoidOptions = new HashMap<>();
+        selenoidOptions.put("enableVNC", true);
+        options.setCapability("selenoid:options", selenoidOptions);
+
+        SessionNotCreatedException ex = Assertions.assertThrows(
+                SessionNotCreatedException.class,
+                () -> createDriver(options, "1333")
+        );
+
+        Assertions.assertTrue(
+                ex.getMessage().contains("Not found browser version"),
+                "Должно быть сообщение о ненайденной версии браузера"
         );
     }
 }

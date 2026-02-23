@@ -37,6 +37,23 @@ public class BaseSeleniumJelenoidTest {
         return driver;
     }
 
+    protected WebDriver createDriver(ChromeOptions specificOptions, String browserVersion) throws MalformedURLException {
+        ChromeOptions options = new ChromeOptions();
+        options.setBrowserVersion(browserVersion);
+
+        Map<String, Object> selenoidOptions = new HashMap<>();
+        //selenoidOptions.put("jelenoidToken", TOKEN);
+
+        options.setCapability("selenoid:options", selenoidOptions);
+        if (specificOptions != null) {
+            options.merge(specificOptions);
+        }
+
+        WebDriver driver = new RemoteWebDriver(new URL(HUB_URL), options);
+        driverThreadLocal.set(driver);
+        return driver;
+    }
+
     protected WebDriver getDriver() {
         return driverThreadLocal.get();
     }

@@ -105,6 +105,10 @@ public class PlaywrightSessionService extends TextWebSocketHandler {
                 String imageName = browserManagerService
                         .getImageByBrowserNameAndVersion("playwright", playwrightContainerVersion);
 
+                if (imageName == null) {
+                    throw new RuntimeException("There is no such image");
+                }
+
                 pair.setContainerInfo(dockerExternalService.startPlaywrightContainer(imageName,
                         playwrightContainerVersion));
                 pair.setVersion(playwrightContainerVersion);
@@ -248,14 +252,8 @@ public class PlaywrightSessionService extends TextWebSocketHandler {
 
     private String getPlaywrightVersion(WebSocketSession session) {
 
-        String versionFromSession = (String) session.getAttributes()
+        return (String) session.getAttributes()
                 .get("playwrightVersion");
-
-        if(versionFromSession != null && !versionFromSession.isEmpty()) {
-            return versionFromSession;
-        } else {
-            return defaultPlaywrightVersion;
-        }
     }
 
     private void processWebSocketMessage(WebSocketSession session, WebSocketMessage<?> message) {

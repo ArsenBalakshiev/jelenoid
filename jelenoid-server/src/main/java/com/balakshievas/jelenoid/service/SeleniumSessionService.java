@@ -3,6 +3,7 @@ package com.balakshievas.jelenoid.service;
 import com.balakshievas.jelenoid.config.SessionPublisher;
 import com.balakshievas.jelenoid.config.TaskExecutorConfig;
 import com.balakshievas.jelenoid.dto.*;
+import com.balakshievas.jelenoid.exception.BrowserVersionNotFoundException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -292,6 +293,8 @@ public class SeleniumSessionService {
                     } else {
                         return new BrowserInfo(browserName, browserVersion, image, false);
                     }
+                } else {
+                    throw new BrowserVersionNotFoundException(browserName, browserVersion);
                 }
             }
         }
