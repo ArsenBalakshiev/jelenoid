@@ -60,6 +60,9 @@ public class PlaywrightSessionService extends TextWebSocketHandler {
     @Autowired
     private SessionPublisher sessionEventPublisher;
 
+    @Autowired
+    private BrowserManagerService browserManagerService;
+
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
 
@@ -99,14 +102,13 @@ public class PlaywrightSessionService extends TextWebSocketHandler {
             try {
                 String playwrightContainerVersion = getPlaywrightVersion(session);
 
-                if (playwrightContainerVersion != null) {
-                    pair.setContainerInfo(dockerExternalService.startPlaywrightContainer(playwrightContainerVersion));
-                    pair.setVersion(playwrightContainerVersion);
-                } else {
-                    pair.setContainerInfo(dockerExternalService.startPlaywrightContainer(defaultPlaywrightVersion));
-                    pair.setVersion(defaultPlaywrightVersion);
-                    playwrightContainerVersion = defaultPlaywrightVersion;
-                }
+                String imageName = browserManagerService
+                        .getImageByBrowserNameAndVersion("playwright", playwrightContainerVersion);
+
+                pair.setContainerInfo(dockerExternalService.startPlaywrightContainer(imageName,
+                        playwrightContainerVersion));
+                pair.setVersion(playwrightContainerVersion);
+
                 if (pair.getContainerInfo() == null) {
                     throw new RuntimeException("Failed to start a new Playwright container.");
                 }
@@ -245,8 +247,15 @@ public class PlaywrightSessionService extends TextWebSocketHandler {
     }
 
     private String getPlaywrightVersion(WebSocketSession session) {
-        return (String) session.getAttributes()
+
+        String versionFromSession = (String) session.getAttributes()
                 .get("playwrightVersion");
+
+        if(versionFromSession != null && !versionFromSession.isEmpty()) {
+            return versionFromSession;
+        } else {
+            return defaultPlaywrightVersion;
+        }
     }
 
     private void processWebSocketMessage(WebSocketSession session, WebSocketMessage<?> message) {

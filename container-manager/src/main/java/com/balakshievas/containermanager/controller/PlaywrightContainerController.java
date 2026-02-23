@@ -17,8 +17,9 @@ public class PlaywrightContainerController {
     private PlaywrightContainerManagerService playwrightContainerManagerService;
 
     @PostMapping
-    public ResponseEntity<ContainerInfo> startPlaywrightContainer(@RequestParam String image) {
-        return ResponseEntity.ok(playwrightContainerManagerService.startPlaywrightContainer(image));
+    public ResponseEntity<ContainerInfo> startPlaywrightContainer(@RequestParam String image,
+                                                                  @RequestParam String playwrightVersion) {
+        return ResponseEntity.ok(playwrightContainerManagerService.startPlaywrightContainer(image, playwrightVersion));
     }
 
 }

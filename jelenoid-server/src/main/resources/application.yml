@@ -13,7 +13,7 @@ spring:
 
 jelenoid:
   auth:
-    token: ${JELENOID_AUTH_TOKEN:super-secret-password}
+    token: ${JELENOID_AUTH_TOKEN:}
   container-manager:
     address: ${CONTAINER_MANAGER_ADDRESS:http://localhost:8080}
   limit: ${PARALLEL_SESSIONS:10}

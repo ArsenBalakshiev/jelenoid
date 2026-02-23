@@ -38,11 +38,12 @@ public class DockerExternalService {
         return new ContainerInfo(containerInfoRecord.containerId(), containerInfoRecord.containerName());
     }
 
-    public ContainerInfo startPlaywrightContainer(String image) {
+    public ContainerInfo startPlaywrightContainer(String image, String playwrightVersion) {
         ContainerInfoRecord containerInfoRecord = restClient.post()
                 .uri(uriBuilder -> uriBuilder
                         .path("/api/containers/playwright")
                         .queryParam("image", image)
+                        .queryParam("playwrightVersion", playwrightVersion)
                         .build())
                 .retrieve()
                 .body(ContainerInfoRecord.class);

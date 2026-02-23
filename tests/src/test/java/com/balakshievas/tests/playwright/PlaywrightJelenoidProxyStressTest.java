@@ -1,4 +1,4 @@
-package com.balakshievas.jelenoid;
+package com.balakshievas.tests.playwright;
 
 import com.microsoft.playwright.*;
 import org.junit.jupiter.api.*;
@@ -10,9 +10,9 @@ import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class PlaywrightProxyStressTest {
+public class PlaywrightJelenoidProxyStressTest {
 
-    private static final Logger log = LoggerFactory.getLogger(PlaywrightProxyStressTest.class);
+    private static final Logger log = LoggerFactory.getLogger(PlaywrightJelenoidProxyStressTest.class);
 
     private static final int TOTAL_SESSIONS_TO_TEST = 20;
     private static final String PROXY_WS_URL = "ws://localhost:4444/playwright";
