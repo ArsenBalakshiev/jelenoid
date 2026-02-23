@@ -1,6 +1,6 @@
 package com.balakshievas.jelenoid.controller;
 
-import com.balakshievas.jelenoid.service.SessionService;
+import com.balakshievas.jelenoid.service.SeleniumSessionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,11 +19,11 @@ public class LogsController {
     private static final Logger log = LoggerFactory.getLogger(LogsController.class);
 
     @Autowired
-    private SessionService sessionService;
+    private SeleniumSessionService seleniumSessionService;
 
     @GetMapping(path = "/{sessionId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public ResponseEntity<StreamingResponseBody> streamLogs(@PathVariable String sessionId) {
-        StreamingResponseBody stream = sessionService.streamLogsForSession(sessionId);
+        StreamingResponseBody stream = seleniumSessionService.streamLogsForSession(sessionId);
 
         return ResponseEntity.ok()
                 .contentType(MediaType.TEXT_EVENT_STREAM)

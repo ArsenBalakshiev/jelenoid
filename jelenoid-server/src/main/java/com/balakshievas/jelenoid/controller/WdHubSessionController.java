@@ -1,6 +1,6 @@
 package com.balakshievas.jelenoid.controller;
 
-import com.balakshievas.jelenoid.service.SessionService;
+import com.balakshievas.jelenoid.service.SeleniumSessionService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
@@ -19,16 +19,16 @@ import java.util.concurrent.CompletableFuture;
 public class WdHubSessionController {
 
     @Autowired
-    private SessionService sessionService;
+    private SeleniumSessionService seleniumSessionService;
 
     @PostMapping("/session")
     public CompletableFuture<Map<String, Object>> createSession(@RequestBody Map<String, Object> requestBody) {
-        return sessionService.createSessionOrQueue(requestBody);
+        return seleniumSessionService.createSessionOrQueue(requestBody);
     }
 
     @DeleteMapping("/session/{sessionId}")
     public ResponseEntity<Void> deleteSession(@PathVariable String sessionId) {
-        sessionService.deleteSession(sessionId);
+        seleniumSessionService.deleteSession(sessionId);
         return ResponseEntity.ok().build();
     }
 
@@ -44,7 +44,7 @@ public class WdHubSessionController {
         String fullPath = request.getRequestURI();
         String relativePath = fullPath.substring("/wd/hub".length());
 
-        return sessionService.proxyRequest(sessionId, method, relativePath, headers, bodyStream);
+        return seleniumSessionService.proxyRequest(sessionId, method, relativePath, headers, bodyStream);
     }
 
     @PostMapping({"/session/{sessionId}/se/file", "/session/{sessionId}/file"})
@@ -64,7 +64,7 @@ public class WdHubSessionController {
             return ResponseEntity.badRequest().build();
         }
 
-        String filePathInContainer = sessionService.uploadFileToSession(sessionId, fileBytes);
+        String filePathInContainer = seleniumSessionService.uploadFileToSession(sessionId, fileBytes);
         return ResponseEntity.ok(Map.of("value", filePathInContainer));
     }
 }

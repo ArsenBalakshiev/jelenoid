@@ -1,4 +1,4 @@
-package com.balakshievas.jelenoid.config;
+package com.balakshievas.jelenoid.utils;
 
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;

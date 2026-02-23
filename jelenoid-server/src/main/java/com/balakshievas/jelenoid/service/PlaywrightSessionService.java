@@ -1,12 +1,10 @@
-package com.balakshievas.jelenoid.websocket.playwright;
+package com.balakshievas.jelenoid.service;
 
 import com.balakshievas.jelenoid.config.SessionPublisher;
 import com.balakshievas.jelenoid.config.TaskExecutorConfig;
 import com.balakshievas.jelenoid.dto.PlaywrightSession;
 import com.balakshievas.jelenoid.dto.SessionInfo;
 import com.balakshievas.jelenoid.dto.StatusChangedEvent;
-import com.balakshievas.jelenoid.service.ActiveSessionsService;
-import com.balakshievas.jelenoid.service.DockerExternalService;
 import jakarta.annotation.PreDestroy;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
@@ -25,15 +23,16 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 @Component
-public class ProxyWebSocketHandler extends TextWebSocketHandler {
+public class PlaywrightSessionService extends TextWebSocketHandler {
 
-    private final Logger log = LoggerFactory.getLogger(ProxyWebSocketHandler.class);
+    private final Logger log = LoggerFactory.getLogger(PlaywrightSessionService.class);
 
     @Value("${jelenoid.playwright.port}")
     private Integer playwrightPort;
@@ -43,6 +42,9 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
 
     @Value("${jelenoid.playwright.default_version}")
     private String defaultPlaywrightVersion;
+
+    @Value("${jelenoid.auth.token:}")
+    private String authToken;
 
     private final ExecutorService proxyExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
@@ -58,8 +60,23 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
     @Autowired
     private SessionPublisher sessionEventPublisher;
 
+    @Autowired
+    private BrowserManagerService browserManagerService;
+
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
+
+        if (authToken != null && !authToken.isBlank()) {
+            List<String> headerValues = session.getHandshakeHeaders().get("X-Jelenoid-Token");
+            String token = (headerValues != null && !headerValues.isEmpty()) ? headerValues.getFirst() : null;
+
+            if (!authToken.equals(token)) {
+                log.warn("Session {}: Unauthorized Playwright connection attempt.", session.getId());
+                closeSessionSilently(session, CloseStatus.POLICY_VIOLATION.withReason("Unauthorized"));
+                return;
+            }
+        }
+
         PlaywrightSession pair = new PlaywrightSession(session);
         activeSessionsService.putPlaywrightActiveSession(session, pair);
         log.info("Session {}: Connection received.", session.getId());
@@ -85,14 +102,17 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
             try {
                 String playwrightContainerVersion = getPlaywrightVersion(session);
 
-                if (playwrightContainerVersion != null) {
-                    pair.setContainerInfo(dockerExternalService.startPlaywrightContainer(playwrightContainerVersion));
-                    pair.setVersion(playwrightContainerVersion);
-                } else {
-                    pair.setContainerInfo(dockerExternalService.startPlaywrightContainer(defaultPlaywrightVersion));
-                    pair.setVersion(defaultPlaywrightVersion);
-                    playwrightContainerVersion = defaultPlaywrightVersion;
+                String imageName = browserManagerService
+                        .getImageByBrowserNameAndVersion("playwright", playwrightContainerVersion);
+
+                if (imageName == null) {
+                    throw new RuntimeException("There is no such image");
                 }
+
+                pair.setContainerInfo(dockerExternalService.startPlaywrightContainer(imageName,
+                        playwrightContainerVersion));
+                pair.setVersion(playwrightContainerVersion);
+
                 if (pair.getContainerInfo() == null) {
                     throw new RuntimeException("Failed to start a new Playwright container.");
                 }
@@ -231,6 +251,7 @@ public class ProxyWebSocketHandler extends TextWebSocketHandler {
     }
 
     private String getPlaywrightVersion(WebSocketSession session) {
+
         return (String) session.getAttributes()
                 .get("playwrightVersion");
     }

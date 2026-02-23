@@ -87,3 +87,7 @@ jelenoid-ui/pnpm-debug.log*
 secrets/
 *.json.secret
 /service-metrics/target/
+
+tests/target/
+
+container-manager/target/

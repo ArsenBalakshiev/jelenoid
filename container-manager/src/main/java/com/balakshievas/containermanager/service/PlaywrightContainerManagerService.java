@@ -27,12 +27,10 @@ public class PlaywrightContainerManagerService extends AbstractDockerService {
                 LoggerFactory.getLogger(PlaywrightContainerManagerService.class));
     }
 
-    public ContainerInfo startPlaywrightContainer(String playwrightVersion) {
+    public ContainerInfo startPlaywrightContainer(String playwrightImage, String playwrightVersion) {
 
-        String imageName = "mcr.microsoft.com/playwright:v" + playwrightVersion;
-
-        if (!imageExists(imageName)) {
-            throw new NoImageException("There is no playwright image with name " + imageName);
+        if (!imageExists(playwrightImage)) {
+            throw new NoImageException("There is no playwright image with name " + playwrightImage);
         }
 
         String containerName = "jelenoid-playwright-" + UUID.randomUUID().toString().substring(0, 8);
@@ -51,7 +49,7 @@ public class PlaywrightContainerManagerService extends AbstractDockerService {
         };
 
         CreateContainerResponse container = dockerClient
-                .createContainerCmd(imageName)
+                .createContainerCmd(playwrightImage)
                 .withName(containerName)
                 .withHostConfig(hostConfig)
                 .withCmd(cmd)

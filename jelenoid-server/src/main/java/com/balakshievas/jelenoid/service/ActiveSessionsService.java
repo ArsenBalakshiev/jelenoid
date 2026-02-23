@@ -62,7 +62,7 @@ public class ActiveSessionsService {
 
     @Lazy
     @Autowired
-    private SessionService sessionService;
+    private SeleniumSessionService seleniumSessionService;
 
     @PostConstruct
     public void init() {
@@ -117,7 +117,7 @@ public class ActiveSessionsService {
                 releaseSlot();
                 dockerExternalService.stopContainer(seleniumSession.getContainerInfo().getContainerId());
                 sessionEventPublisher.endInactiveSessionAndPublish(seleniumSession.getSessionInfo());
-                sessionService.processQueue();
+                seleniumSessionService.processQueue();
                 return true;
             }
             return false;

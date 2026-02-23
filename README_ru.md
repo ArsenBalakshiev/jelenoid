@@ -73,6 +73,11 @@
 docker-compose up -d --build --force-recreate jelenoid-server
 ```
 
+Для запуска менеджера контейнеров в Docker (с hot-reload для разработки):
+```shell
+docker-compose up -d --build --force-recreate container-manager
+```
+
 Запуск ui:
 ```shell
 npm run dev --prefix jelenoid-ui
