@@ -21,6 +21,12 @@ public class SeleniumContainerManagerService extends AbstractDockerService {
 
     private final RestClient restClient = RestClient.builder().build();
 
+    @Value("${jelenoid.selenium.shm-size:2147483648}")
+    private Long shmSize;
+
+    @Value("${jelenoid.selenium.tmpfs-size:1g}")
+    private String tmpFsSize;
+
     public SeleniumContainerManagerService(DockerClient dockerClient,
                                            @Value("${jelenoid.docker.network:jelenoid-net}") String dockerNetworkName,
                                            @Value("${jelenoid.timeouts.cleanup}") int containerStopTimeout,
@@ -32,7 +38,7 @@ public class SeleniumContainerManagerService extends AbstractDockerService {
     public ContainerInfo startContainer(String image, boolean isVncEnabled) {
 
         if (!imageExists(image)) {
-            throw new NoImageException("There is no playwright image with name " + image);
+            throw new NoImageException("There is no selenium image with name " + image);
         }
 
         String hubSessionId = UUID.randomUUID().toString();
@@ -41,8 +47,8 @@ public class SeleniumContainerManagerService extends AbstractDockerService {
 
         HostConfig hostConfig = HostConfig.newHostConfig()
                 .withNetworkMode(dockerNetworkName)
-                .withShmSize(2_147_483_648L)
-                .withTmpFs(Map.of("/tmp", "rw,noexec,nosuid,size=1g"));
+                .withShmSize(shmSize)
+                .withTmpFs(Map.of("/tmp", "rw,noexec,nosuid,size=" + tmpFsSize));
 
         List<String> envVars = new ArrayList<>();
         if (isVncEnabled) {
@@ -60,7 +66,13 @@ public class SeleniumContainerManagerService extends AbstractDockerService {
 
         log.info("Started container {} with name {}", container.getId(), containerName);
 
-        waitForContainerToBeReady(containerName);
+        try {
+            waitForContainerToBeReady(containerName);
+        } catch (Exception e) {
+            log.error("Container failed to become ready, stopping it...");
+            stopContainer(containerId);
+            throw e;
+        }
 
         return new ContainerInfo(containerId, containerName);
     }
@@ -79,7 +91,7 @@ public class SeleniumContainerManagerService extends AbstractDockerService {
                         .toEntity(String.class);
 
                 if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null && response.getBody().contains("\"ready\":true")) {
-                    log.info("Container {} reported ready. Adding a tactical delay of 200ms.", containerIpAddress);
+                    log.info("Container {} reported ready. Adding a tactical delay of 500ms.", containerIpAddress);
                     Thread.sleep(500);
                     return;
                 }

@@ -22,7 +22,6 @@ public class VncProxySocketHandler extends BinaryWebSocketHandler {
     private final ContainerInfo container;
     private Socket vncSocket;
 
-    // Конструктор теперь принимает готовую информацию о контейнере
     public VncProxySocketHandler(ContainerInfo container) {
         this.container = container;
     }
@@ -56,7 +55,6 @@ public class VncProxySocketHandler extends BinaryWebSocketHandler {
                     }
                 }
             } catch (IOException e) {
-                // Это нормальное завершение, когда клиент закрывает соединение
             } finally {
                 closeConnections(clientSession);
             }

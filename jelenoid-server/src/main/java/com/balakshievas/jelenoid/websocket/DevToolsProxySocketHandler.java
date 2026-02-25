@@ -50,7 +50,6 @@ public class DevToolsProxySocketHandler extends TextWebSocketHandler {
 
     @Override
     protected void handleTextMessage(WebSocketSession clientSession, TextMessage message) throws IOException {
-        // Пересылаем текстовые сообщения ОТ клиента В контейнер
         if (targetSession != null && targetSession.isOpen()) {
             log.debug("CDP Proxy: Forwarding message from client to container: {}", message.getPayload());
             targetSession.sendMessage(message);

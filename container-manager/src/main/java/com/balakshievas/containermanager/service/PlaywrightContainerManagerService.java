@@ -10,10 +10,20 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Service
 public class PlaywrightContainerManagerService extends AbstractDockerService {
+
+    @Value("${jelenoid.playwright.port}")
+    private Integer playwrightPort;
+
+    @Value("${jelenoid.playwright.shm-size:4294967296}")
+    private Long shmSize;
+
+    @Value("${jelenoid.playwright.tmpfs-size:2g}")
+    private String tmpFsSize;
 
     public PlaywrightContainerManagerService(DockerClient dockerClient,
                                              @Value("${jelenoid.docker.network:jelenoid-net}") String dockerNetworkName,
@@ -35,12 +45,19 @@ public class PlaywrightContainerManagerService extends AbstractDockerService {
                 .withInit(true)
                 .withIpcMode("host")
                 .withCapAdd(Capability.SYS_ADMIN)
-                .withNetworkMode(dockerNetworkName);
+                .withNetworkMode(dockerNetworkName)
+                .withShmSize(shmSize)
+                .withTmpFs(Map.of("/tmp", "rw,noexec,nosuid,size=" + tmpFsSize));
 
         String[] cmd = {
-                "/bin/sh",
-                "-c",
-                "npx -y playwright@" + playwrightVersion + " run-server --port 3000 --host 0.0.0.0"
+                "npx",
+                "-y",
+                "playwright@" + playwrightVersion,
+                "run-server",
+                "--port",
+                String.valueOf(playwrightPort),
+                "--host",
+                "0.0.0.0"
         };
 
         CreateContainerResponse container = dockerClient

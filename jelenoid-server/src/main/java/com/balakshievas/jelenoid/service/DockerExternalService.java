@@ -78,7 +78,7 @@ public class DockerExternalService {
 
         return restClient.post()
                 .uri("/api/containers/{containerId}/file", containerId)
-                .contentType(MediaType.MULTIPART_FORM_DATA) // Указываем тип контента
+                .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(body)
                 .retrieve()
                 .body(String.class);

@@ -44,7 +44,7 @@ public class EmitterService {
                         .name("state-update")
                         .data(event);
                 emitter.send(eventBuilder);
-            } catch (Exception e) { // Ловим Exception, а не только IOException
+            } catch (Exception e) {
                 log.debug("Failed to send event to an emitter (client likely disconnected). Marking for removal.");
                 deadEmitters.add(emitter);
                 try {
