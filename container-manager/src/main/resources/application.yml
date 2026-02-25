@@ -12,8 +12,27 @@ spring:
     name: container-manager
 
 jelenoid:
+  selenium:
+    shm-size: ${SELENIUM_CONTAINER_SHM_SIZE:2147483648}
+    tmpfs-size: ${SELENIUM_CONTAINER_TMPFS_SIZE:1g}
+  playwright:
+    port: ${PLAYWRIGHT_PORT:3000}
+    shm-size: ${PLAYWRIGHT_CONTAINER_SHM_SIZE:4294967296}
+    tmpfs-size: ${PLAYWRIGHT_CONTAINER_TMPFS_SIZE:2g}
   docker:
     network: ${DOCKER_NETWORK:jelenoid-net}
   timeouts:
     cleanup: ${CLEANUP_TIMEOUT:15000}
     starting_timeout: ${CONTAINER_STARTING_TIMEOUT:60000}
+
+management:
+  endpoint:
+    health:
+      show-details: always
+      group:
+        custom:
+          include: diskSpace,docker
+  endpoints:
+    web:
+      exposure:
+        include: health,info

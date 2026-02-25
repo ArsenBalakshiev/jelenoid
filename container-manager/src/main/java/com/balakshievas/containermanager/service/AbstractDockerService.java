@@ -49,7 +49,6 @@ public abstract class AbstractDockerService {
                         .exec();
             } catch (NotModifiedException e) {
                 log.info("Container {} already stopped", containerId);
-                return false;
             }
             dockerClient.removeContainerCmd(containerId).exec();
             return true;
@@ -148,6 +147,9 @@ public abstract class AbstractDockerService {
         String fileName = null;
         byte[] fileContent = null;
 
+        // Лимит размера распакованного файла: 50 МБ (защита от Zip Bomb)
+        final long MAX_FILE_SIZE = 50 * 1024 * 1024;
+
         try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(rawBytes))) {
             ZipEntry zipEntry;
             while ((zipEntry = zis.getNextEntry()) != null) {
@@ -155,8 +157,23 @@ public abstract class AbstractDockerService {
                     continue;
                 }
                 fileName = Path.of(zipEntry.getName()).getFileName().toString();
-                fileContent = zis.readAllBytes();
-                break;
+
+                // Безопасное чтение файла чанками вместо zis.readAllBytes()
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                byte[] buffer = new byte[8192];
+                int len;
+                long totalRead = 0;
+
+                while ((len = zis.read(buffer)) > 0) {
+                    totalRead += len;
+                    if (totalRead > MAX_FILE_SIZE) {
+                        throw new IOException("File exceeds maximum allowed size (Zip Bomb protection).");
+                    }
+                    baos.write(buffer, 0, len);
+                }
+
+                fileContent = baos.toByteArray();
+                break; // Берем только первый подходящий файл
             }
         }
 
@@ -195,5 +212,6 @@ public abstract class AbstractDockerService {
 
         return filePathInContainer;
     }
+
 
 }

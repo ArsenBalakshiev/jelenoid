@@ -8,8 +8,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.BlockingQueue;
 
 @RestController
 @RequestMapping("/api/limit")
@@ -24,8 +25,8 @@ public class ActiveSessionsController {
     }
 
     @GetMapping("/request")
-    public BlockingQueue<PendingRequest> getAllPendingRequests() {
-        return activeSessionsService.getSeleniumPendingRequests();
+    public List<PendingRequest> getAllPendingRequests() {
+        return new ArrayList<>(activeSessionsService.getSeleniumPendingRequests());
     }
 
     @GetMapping("/sessions/size")
