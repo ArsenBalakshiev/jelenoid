@@ -121,11 +121,23 @@ public class BrowserManagerService {
 
     public String getImageByBrowserNameAndVersion(String browserName, String version) {
         synchronized (lock) {
+            if(version == null) {
+                return defaultBrowsers.get(browserName).getDockerImageName();
+            }
             BrowserInfo browserInfo = browserList.get(getBrowserKey(browserName, version));
             if(browserInfo == null) {
                 return null;
             }
             return browserInfo.getDockerImageName();
+        }
+    }
+
+    public BrowserInfo getBrowserInfoByBrowserNameAndVersion(String browserName, String version) {
+        synchronized (lock) {
+            if(version == null) {
+                return defaultBrowsers.get(browserName);
+            }
+            return browserList.get(getBrowserKey(browserName, version));
         }
     }
 

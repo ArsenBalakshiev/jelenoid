@@ -5,7 +5,6 @@ import com.balakshievas.containermanager.exception.NoImageException;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.model.Capability;
-import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.HostConfig;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,13 +15,10 @@ import java.util.UUID;
 @Service
 public class PlaywrightContainerManagerService extends AbstractDockerService {
 
-    @Value("${jelenoid.playwright.port}")
-    private Integer playwrightPort;
-
     public PlaywrightContainerManagerService(DockerClient dockerClient,
-                                           @Value("${jelenoid.docker.network:jelenoid-net}") String dockerNetworkName,
-                                           @Value("${jelenoid.timeouts.cleanup}") int containerStopTimeout,
-                                           @Value("${jelenoid.timeouts.starting_timeout}") int containerStartTimeout) {
+                                             @Value("${jelenoid.docker.network:jelenoid-net}") String dockerNetworkName,
+                                             @Value("${jelenoid.timeouts.cleanup}") int containerStopTimeout,
+                                             @Value("${jelenoid.timeouts.starting_timeout}") int containerStartTimeout) {
         super(dockerClient, dockerNetworkName, containerStopTimeout, containerStartTimeout,
                 LoggerFactory.getLogger(PlaywrightContainerManagerService.class));
     }
@@ -44,8 +40,7 @@ public class PlaywrightContainerManagerService extends AbstractDockerService {
         String[] cmd = {
                 "/bin/sh",
                 "-c",
-                "npx -y playwright@" + playwrightVersion + " run-server --port %s --host 0.0.0.0"
-                        .formatted(playwrightPort)
+                "npx -y playwright@" + playwrightVersion + " run-server --port 3000 --host 0.0.0.0"
         };
 
         CreateContainerResponse container = dockerClient
@@ -53,15 +48,14 @@ public class PlaywrightContainerManagerService extends AbstractDockerService {
                 .withName(containerName)
                 .withHostConfig(hostConfig)
                 .withCmd(cmd)
-                .withExposedPorts(ExposedPort.tcp(playwrightPort))
                 .exec();
 
         dockerClient.startContainerCmd(container.getId()).exec();
-        log.info("Container {} started. Waiting for Playwright service to become available on port {}...",
-                container.getId(), playwrightPort);
+        log.info("Container {} started. Waiting for Playwright service to become available ...",
+                container.getId());
 
 
-        if (!waitForOpeningSpecificPort(containerName, playwrightPort)) {
+        if (!waitForOpeningSpecificPort(containerName, 3000)) {
             log.error("Playwright service in container {} did not start. Stopping container.",
                     container.getId());
             stopContainer(container.getId());

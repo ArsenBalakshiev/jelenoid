@@ -2,6 +2,7 @@ package com.balakshievas.jelenoid.service;
 
 import com.balakshievas.jelenoid.config.SessionPublisher;
 import com.balakshievas.jelenoid.config.TaskExecutorConfig;
+import com.balakshievas.jelenoid.dto.BrowserInfo;
 import com.balakshievas.jelenoid.dto.PlaywrightSession;
 import com.balakshievas.jelenoid.dto.SessionInfo;
 import com.balakshievas.jelenoid.dto.StatusChangedEvent;
@@ -34,14 +35,8 @@ public class PlaywrightSessionService extends TextWebSocketHandler {
 
     private final Logger log = LoggerFactory.getLogger(PlaywrightSessionService.class);
 
-    @Value("${jelenoid.playwright.port}")
-    private Integer playwrightPort;
-
     @Value("${jelenoid.timeouts.session}")
     private long sessionTimeoutMillis;
-
-    @Value("${jelenoid.playwright.default_version}")
-    private String defaultPlaywrightVersion;
 
     @Value("${jelenoid.auth.token:}")
     private String authToken;
@@ -102,15 +97,15 @@ public class PlaywrightSessionService extends TextWebSocketHandler {
             try {
                 String playwrightContainerVersion = getPlaywrightVersion(session);
 
-                String imageName = browserManagerService
-                        .getImageByBrowserNameAndVersion("playwright", playwrightContainerVersion);
+                BrowserInfo browserInfo = browserManagerService
+                        .getBrowserInfoByBrowserNameAndVersion("playwright", playwrightContainerVersion);
 
-                if (imageName == null) {
-                    throw new RuntimeException("There is no such image");
+                if (browserInfo == null) {
+                    throw new RuntimeException("There is no such image %s".formatted(playwrightContainerVersion));
                 }
 
-                pair.setContainerInfo(dockerExternalService.startPlaywrightContainer(imageName,
-                        playwrightContainerVersion));
+                pair.setContainerInfo(dockerExternalService.startPlaywrightContainer(browserInfo.getDockerImageName(),
+                        browserInfo.getVersion()));
                 pair.setVersion(playwrightContainerVersion);
 
                 if (pair.getContainerInfo() == null) {
@@ -146,7 +141,7 @@ public class PlaywrightSessionService extends TextWebSocketHandler {
     }
 
     private WebSocketClient createContainerClient(PlaywrightSession pair) {
-        URI containerUri = URI.create("ws://" + pair.getContainerInfo().getContainerName() + ":" + playwrightPort);
+        URI containerUri = URI.create("ws://" + pair.getContainerInfo().getContainerName() + ":3000");
 
         Map<String, String> headersToForward = new HashMap<>();
         pair.getClientSession().getHandshakeHeaders().forEach((key, values) -> {

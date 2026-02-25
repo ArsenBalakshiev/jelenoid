@@ -1,18 +1,69 @@
-[English](./README.md) | [Русский](./README_ru.md)
+[English](./README.md)
 
 ---
 
-# Jelenoid: Powerful and Lightweight Selenium Hub on Java/Spring
+<div align="center">
 
-![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
-![Java](https://img.shields.io/badge/Java-21-orange)
-![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.0-brightgreen)
-![Docker](https://img.shields.io/badge/Docker-Supported-blue)
+### High-performance Selenium + Playwright Hub on Java / Spring Boot
 
-**Jelenoid** is a high-performance, lightweight, and fully customizable Selenium hub written in Java/Spring. It provides native support for both **Selenium** and **Playwright**, allowing you to run UI tests in isolated Docker containers through a single API.
+A lightweight and fast orchestrator for running UI tests in **isolated Docker containers** with support for
+**Selenium (W3C WebDriver)** and **Playwright**, including queueing, concurrency limits,
+and observability (UI + metrics).
 
-Unlike simple proxies, Jelenoid acts as a full-fledged orchestrator, dynamically managing the lifecycle of browser seleniumSessions to ensure a clean and reliable environment for every test run.
+## Why Jelenoid
+
+Jelenoid is not “just a proxy to a browser” — it’s a full orchestrator: it starts a container **per session**, enforces concurrency and queue limits, and cleans up the environment reliably.
+
+Key benefits:
+- **Isolation by default:** one session = one container, less flakiness and “dirty” state.
+- **High throughput:** the server handles routing/session control while Docker operations are moved into a dedicated service.
+- **Selenium + Playwright in one hub:** run different kinds of tests in a single stack.
+- **Load control:** concurrency limits and request queueing for CI/CD.
+- **Observability:** separate metrics service + messaging + database for storage.
+
+---
+
+## 🧩 Stack services
+
+The stack runs via Docker Compose and includes:
+
+### `jelenoid-server`
+Main hub (Selenium + Playwright):
+- Port: `4444`
+- Reads browser configuration from `browsers.json`
+- Sends execution to `container-manager`
+- Can publish events/logs to NATS (optional)
+
+### `container-manager`
+Container lifecycle manager:
+- Starts/stops browser containers
+- Requires Docker API access: mounts `/var/run/docker.sock`
+- Runs in the same network as `jelenoid-server` (`jelenoid-net`)
+- Default internal port: `8080`
+
+### `jelenoid-ui`
+Web UI for monitoring:
+- Production image: `suomessa/jelenoid:ui-latest`
+- Port: `80` (published to host)
+- Connects to `jelenoid-server` via `VITE_SERVER_BASE_URL`
+
+### `metrics-service`
+Metrics service:
+- Stores data in Postgres
+- Uses NATS for event delivery
+- Depends on `nats` and `jelenoid-server`
+
+### `nats`
+NATS + JetStream:
+- Ports: `4222` (client), `8222` (monitoring)
+- JetStream storage: `nats_data` volume
+
+### `metrics-db`
+PostgreSQL for metrics:
+- Port: `5432`
+- DB/user/password configured via environment variables
+
+> Note: `depends_on` controls container start order in Compose but does not guarantee a dependency is “ready” to accept connections (unless you add healthchecks / readiness logic).
 
 ---
 
@@ -43,26 +94,39 @@ Unlike simple proxies, Jelenoid acts as a full-fledged orchestrator, dynamically
 
 ## ⚙️ Configuration (Environment Variables)
 
-The application is configured using environment variables.
+jelenoid-server
 
-| Variable                   | Description                                                      | Default Value                          |
-| -------------------------- | ---------------------------------------------------------------- | -------------------------------------- |
-| `PARALLEL_SESSIONS`        | The number of parallel seleniumSessions for Selenium tests.              | `10`                                   |
-| `QUEUE_LIMIT`              | The queue limit for Selenium seleniumSessions.                           | `100`                                  |
-| `DOCKER_NETWORK`           | The Docker network for containers.                               | `jelenoid-net`                         |
-| `BROWSERS_FILE`            | The path to the `browsers.json` file for image configuration.     | (internal file)                        |
-| `QUEUE_TIMEOUT`            | The timeout for the Selenium queue (in ms).                      | `30000`                                |
-| `SESSION_TIMEOUT`          | The inactivity timeout for a Selenium/Playwright seleniumSession (in ms).| `600000`                               |
-| `STARTUP_TIMEOUT`          | The timeout for the job that tracks hanging seleniumSessions (in ms).    | `30000`                                |
-| `CLEANUP_TIMEOUT`          | The timeout for container removal (in ms).                       | `15000`                                |
-| `CONTAINER_STARTING_TIMEOUT` | The timeout for container startup (in ms).                       | `60000`                                |
-| `UI_HOSTS_LIST`            | A comma-separated list of UI hosts for CORS.                     | `http://localhost:80,http://localhost` |
-| `PLAYWRIGHT_PORT`          | The port inside the Playwright container.                        | `3000`                                 |
-| `PLAYWRIGHT_DEFAULT_VERSION`| **(Required)** The default version of Playwright.                | (none)                                 |
-| `PLAYWRIGHT_SESSION_LIMIT` | The number of parallel seleniumSessions for Playwright tests.            | `10`                                   |
-| `PLAYWRIGHT_QUEUE_LIMIT`   | The queue limit for Playwright seleniumSessions.                         | `100`                                  |
+| Variable                   | Description                                                               | Default Value                          |
+|----------------------------|---------------------------------------------------------------------------| -------------------------------------- |
+| `PARALLEL_SESSIONS`        | The number of parallel seleniumSessions for Selenium tests.               | `10`                                   |
+| `QUEUE_LIMIT`              | The queue limit for Selenium seleniumSessions.                            | `100`                                  |
+| `BROWSERS_FILE`            | The path to the `browsers.json` file for image configuration.             | (internal file)                        |
+| `QUEUE_TIMEOUT`            | The timeout for the Selenium queue (in ms).                               | `30000`                                |
+| `SESSION_TIMEOUT`          | The inactivity timeout for a Selenium/Playwright seleniumSession (in ms). | `600000`                               |
+| `STARTUP_TIMEOUT`          | The timeout for the job that tracks hanging seleniumSessions (in ms).     | `30000`                                |
+| `UI_HOSTS_LIST`            | A comma-separated list of UI hosts for CORS.                              | `http://localhost:80,http://localhost` |
+| `PLAYWRIGHT_SESSION_LIMIT` | The number of parallel seleniumSessions for Playwright tests.             | `10`                                   |
+| `PLAYWRIGHT_QUEUE_LIMIT`   | The queue limit for Playwright seleniumSessions.                          | `100`                                  |
+| `NATS_SERVER`              | A nats host fot collect logs.                                             | `nats://nats:4222`                                  |
+
+container-manager
+
+| Variable                     | Description                  | Default Value  |
+|------------------------------|------------------------------|----------------|
+| `CLEANUP_TIMEOUT`            | Container deletion timeout.  | `15000`        |
+| `CONTAINER_STARTING_TIMEOUT` | Timeout for container start. | `60000`        |
+| `DOCKER_NETWORK`             | Docker network name.         | `jelenoid-net` |
+| `CONTAINER_MANAGER_PORT`     | App port.                    | `8080`         |
 
 ---
+
+# Start app
+
+```shell
+docker-compose --f=docker-compose-prod.yml up -d
+```
+
+# Start app in dev mode
 
 ## 🛠️ Usage and Commands
 
@@ -102,3 +166,5 @@ Demo nginx for tests:
 ```shell
 docker run -d --name mynginx -p 8080:80 nginx
 ```
+
+</div>

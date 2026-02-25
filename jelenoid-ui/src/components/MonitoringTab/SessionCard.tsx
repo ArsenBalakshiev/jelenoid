@@ -29,7 +29,7 @@ const SessionCard: React.FC<Props> = ({ session, active, onOpen, onClose }) => {
                 />
                 <span className="browser">
                     {session.kind === 'selenium'
-                        ? `${session.browserName} ${session.browserVersion}`
+                        ? `${session.browserName} ${session.version}`
                         : `${session.playwrightVersion}`}
                 </span>
                 {session.kind === 'selenium' && session.vncEnabled && (
