@@ -147,7 +147,6 @@ public abstract class AbstractDockerService {
         String fileName = null;
         byte[] fileContent = null;
 
-        // Лимит размера распакованного файла: 50 МБ (защита от Zip Bomb)
         final long MAX_FILE_SIZE = 50 * 1024 * 1024;
 
         try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(rawBytes))) {
@@ -158,7 +157,6 @@ public abstract class AbstractDockerService {
                 }
                 fileName = Path.of(zipEntry.getName()).getFileName().toString();
 
-                // Безопасное чтение файла чанками вместо zis.readAllBytes()
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 byte[] buffer = new byte[8192];
                 int len;
@@ -173,7 +171,7 @@ public abstract class AbstractDockerService {
                 }
 
                 fileContent = baos.toByteArray();
-                break; // Берем только первый подходящий файл
+                break;
             }
         }
 

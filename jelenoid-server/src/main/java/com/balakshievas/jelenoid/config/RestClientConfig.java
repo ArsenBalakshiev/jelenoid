@@ -81,7 +81,7 @@ public class RestClientConfig {
 
         return builder
                 .requestFactory(requestFactory)
-                .baseUrl(containerManagerAddress) // Если нужно задать базовый URL
+                .baseUrl(containerManagerAddress)
                 .build();
     }
 }
