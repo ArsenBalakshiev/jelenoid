@@ -3,6 +3,7 @@ package com.balakshievas.tests.playwright;
 import com.microsoft.playwright.Page;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -11,7 +12,7 @@ public class PlaywrightJelenoidVersionsTest extends BasePlaywrightJelenoidTest {
     @ParameterizedTest
     @ValueSource(strings = {
             "ws://localhost:4444/playwright",
-            "ws://localhost:4444/playwright-1.53.0"
+            "ws://localhost:4444/playwright-1.58.0"
     })
     @DisplayName("Тестирование маршрутизации к разным версиям Playwright")
     void testDifferentPlaywrightVersions(String wsUrl) {
