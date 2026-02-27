@@ -15,7 +15,7 @@ public class PlaywrightJelenoidProxyStressTest {
     private static final Logger log = LoggerFactory.getLogger(PlaywrightJelenoidProxyStressTest.class);
 
     private static final int TOTAL_SESSIONS_TO_TEST = 20;
-    private static final String PROXY_WS_URL = "ws://localhost:4444/playwright";
+    private static final String PROXY_WS_URL = "ws://localhost:4444/playwright-1.58.0";
 
     private ExecutorService executorService;
 

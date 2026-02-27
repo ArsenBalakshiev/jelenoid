@@ -15,7 +15,7 @@ public class PlaywrightJelenoidThroughputTest {
 
     private static final int ACTIVE_SESSIONS = 10;
     private static final int COMMANDS_PER_SESSION = 2000;
-    private static final String WS_ENDPOINT = "ws://localhost:4444/playwright";
+    private static final String WS_ENDPOINT = "ws://localhost:4444/playwright-1.58.0";
 
     @Test
     @DisplayName("Playwright WebSocket Proxy Throughput Benchmark")
