@@ -2,7 +2,9 @@ version: '3.8'
 
 services:
   jelenoid-server:
-    build: ./jelenoid-server
+    build:
+      context: ./jelenoid-server
+      dockerfile: Dockerfile.dev
     container_name: jelenoid-server
     ports:
       - "4444:4444"
@@ -18,9 +20,12 @@ services:
       - jelenoid-net
 
   container-manager:
-    build: ./container-manager
+    build:
+      context: ./container-manager
+      dockerfile: Dockerfile.dev
     container_name: container-manager
     ports:
+      - "8080:8080"
       - "5006:5005"
     volumes:
       - ./container-manager/src:/app/src

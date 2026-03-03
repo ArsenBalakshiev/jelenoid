@@ -9,16 +9,16 @@ services:
     volumes:
       - "./browsers.json:/app/browsers.json:ro"
     environment:
-      - PARALLEL_SESSIONS=10 //optional
-      - QUEUE_LIMIT=100 //optional
+      - PARALLEL_SESSIONS=10
+      - QUEUE_LIMIT=100
       - BROWSERS_FILE=/app/browsers.json
-      - QUEUE_TIMEOUT=30000 //optional
-      - SESSION_TIMEOUT=600000 //optional
-      - STARTUP_TIMEOUT=30000 //optional
-      - UI_HOSTS_LIST=http://localhost:80,http://localhost //optional
-      - PLAYWRIGHT_SESSION_LIMIT=10 //optional
-      - PLAYWRIGHT_QUEUE_LIMIT=100 //optional
-      - NATS_SERVER=nats://nats:4222 //optional, required if you want collect logs
+      - QUEUE_TIMEOUT=30000
+      - SESSION_TIMEOUT=600000
+      - STARTUP_TIMEOUT=30000
+      - UI_HOSTS_LIST=http://localhost:80,http://localhost
+      - PLAYWRIGHT_SESSION_LIMIT=10
+      - PLAYWRIGHT_QUEUE_LIMIT=100
+      - NATS_SERVER=nats://nats:4222
     networks:
       - jelenoid-net
 
@@ -26,14 +26,12 @@ services:
     image: suomessa/jelenoid:container-manager-latest
     container_name: container-manager
     volumes:
-      - ./container-manager/src:/app/src
-      - ./container-manager/target:/app/target
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - CLEANUP_TIMEOUT=15000 //optional
-      - CONTAINER_STARTING_TIMEOUT=60000 //optional
-      - DOCKER_NETWORK=jelenoid-net //optional
-      - CONTAINER_MANAGER_PORT=8080 //optional
+      - CLEANUP_TIMEOUT=15000
+      - CONTAINER_STARTING_TIMEOUT=60000
+      - DOCKER_NETWORK=jelenoid-net
+      - CONTAINER_MANAGER_PORT=8080
     networks:
       - jelenoid-net
 

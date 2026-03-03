@@ -152,6 +152,11 @@ To build the server image:
 docker build -t suomessa/jelenoid:server-latest .\jelenoid-server\
 ```
 
+To build the container-manager image:
+```shell
+docker build -t suomessa/jelenoid:container-manager-latest .\container-manager\
+```
+
 To build the UI image:
 ```shell
 docker build -t suomessa/jelenoid:ui-latest .\jelenoid-ui\.

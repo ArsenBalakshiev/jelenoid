@@ -91,3 +91,4 @@ secrets/
 tests/target/
 
 container-manager/target/
+/build
