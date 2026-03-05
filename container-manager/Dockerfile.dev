@@ -1,9 +1,15 @@
-FROM maven:3.9.6-eclipse-temurin-21
+# container-manager/Dockerfile.dev
+FROM golang:1.22
+
 WORKDIR /app
 
-COPY pom.xml .
-RUN mvn dependency:go-offline -B
+# Устанавливаем Air (hot-reload) и Delve (debugger)
+RUN go install github.com/air-verse/air@latest && \
+    go install github.com/go-delve/delve/cmd/dlv@latest
 
-COPY src ./src
+# Копируем go.mod и go.sum для кэширования слоев
+COPY go.mod go.sum ./
+RUN go mod download
 
-CMD ["mvn", "spring-boot:run", "-Pdev"]
+# Запускаем Air (он сам подхватит конфигурацию из .air.toml)
+CMD ["air", "-c", ".air.toml"]

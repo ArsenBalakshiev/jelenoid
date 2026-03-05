@@ -1,27 +1,13 @@
-FROM maven:3.9.6-eclipse-temurin-21 AS builder
-WORKDIR /build
-
-COPY pom.xml .
-RUN mvn dependency:go-offline -B
-
-COPY src ./src
-RUN mvn clean package -DskipTests -B
-
-FROM eclipse-temurin:21-jre-jammy AS extractor
-COPY --from=builder /build/target/container-manager-0.0.1-SNAPSHOT.jar /app.jar
-WORKDIR /extracted
-RUN java -Djarmode=tools -jar /app.jar extract --layers --destination .
-
-FROM eclipse-temurin:21-jre-jammy
+FROM --platform=linux/amd64 golang:1.25-alpine AS builder
 WORKDIR /app
 
-COPY --from=extractor /extracted/dependencies/ ./
-COPY --from=extractor /extracted/spring-boot-loader/ ./
-COPY --from=extractor /extracted/snapshot-dependencies/ ./
-COPY --from=extractor /extracted/application/ ./
+COPY go.mod go.sum ./
+RUN go mod download
 
-EXPOSE 8080
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o server main.go
 
-ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
-
-ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]
+FROM --platform=linux/amd64 alpine:3.19
+WORKDIR /app
+COPY --from=builder /app/server /app/server
+ENTRYPOINT ["/app/server"]

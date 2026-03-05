@@ -19,6 +19,21 @@ services:
     networks:
       - jelenoid-net
 
+  container-manager-java:
+    build:
+      context: ./container-manager-java
+      dockerfile: Dockerfile.dev
+    container_name: container-manager-java
+    ports:
+      - "8080:8080"
+      - "5006:5005"
+    volumes:
+      - ./container-manager/src:/app/src
+      - ./container-manager/target:/app/target
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - jelenoid-net
+
   container-manager:
     build:
       context: ./container-manager
@@ -28,9 +43,9 @@ services:
       - "8080:8080"
       - "5006:5005"
     volumes:
-      - ./container-manager/src:/app/src
-      - ./container-manager/target:/app/target
+      - ./container-manager:/app
       - /var/run/docker.sock:/var/run/docker.sock
+      - go-mod-cache:/go/pkg/mod
     networks:
       - jelenoid-net
 
@@ -92,5 +107,6 @@ networks:
     name: jelenoid-net
 
 volumes:
+  go-mod-cache:
   nats_data: {}
 

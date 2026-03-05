@@ -15,10 +15,11 @@ services:
       - QUEUE_TIMEOUT=30000
       - SESSION_TIMEOUT=600000
       - STARTUP_TIMEOUT=30000
-      - UI_HOSTS_LIST=http://localhost:80,http://localhost
+      - UI_HOSTS_LIST=http://localhost:80,http://localhost,http://localhost:3000
       - PLAYWRIGHT_SESSION_LIMIT=10
       - PLAYWRIGHT_QUEUE_LIMIT=100
       - NATS_SERVER=nats://nats:4222
+      - CONTAINER_MANAGER_ADDRESS=http://container-manager:8080
     networks:
       - jelenoid-net
 

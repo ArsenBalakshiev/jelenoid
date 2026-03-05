@@ -9,7 +9,7 @@
         <relativePath/>
     </parent>
     <groupId>com.balakshievas</groupId>
-    <artifactId>container-manager</artifactId>
+    <artifactId>container-manager-java</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>container-manager</name>
     <description>container-manager</description>

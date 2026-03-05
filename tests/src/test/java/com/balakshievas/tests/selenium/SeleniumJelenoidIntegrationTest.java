@@ -88,8 +88,8 @@ class SeleniumJelenoidIntegrationTest extends BaseSeleniumJelenoidTest {
         selenoidOptions.put("enableVNC", true);
         options.setCapability("selenoid:options", selenoidOptions);
 
-        WebDriver driver = createDriver(options);
-        driver.get("https://google.com");
+        WebDriver driver = createDriverWithOptions(options);
+        driver.get("http://host.docker.internal:8080");
 
         String sessionId = ((RemoteWebDriver) getDriver()).getSessionId().toString();
         System.out.println("VNC сессия активна. ID: " + sessionId);
