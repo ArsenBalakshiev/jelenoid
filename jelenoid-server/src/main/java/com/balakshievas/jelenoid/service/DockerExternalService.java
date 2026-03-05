@@ -84,32 +84,6 @@ public class DockerExternalService {
                 .body(String.class);
     }
 
-    /*public SseEmitter streamContainerLogs(String containerId) {
-        SseEmitter clientEmitter = new SseEmitter(Long.MAX_VALUE);
-        Thread.ofVirtual().start(() -> {
-            try {
-                restClient.get()
-                        .uri("/api/containers/" + containerId + "/logs")
-                        .accept(MediaType.TEXT_EVENT_STREAM)
-                        .exchange((request, response) -> {
-                            try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.getBody()))) {
-                                String line;
-                                while ((line = reader.readLine()) != null) {
-                                    if (line.startsWith("data:")) {
-                                        clientEmitter.send(line.substring(5));
-                                    }
-                                }
-                            }
-                            return null;
-                        });
-                clientEmitter.complete();
-            } catch (Exception e) {
-                clientEmitter.completeWithError(e);
-            }
-        });"/api/containers/" + containerId + "/logs"
-        return clientEmitter;
-    }*/
-
     public StreamingResponseBody streamContainerLogs(String containerId) {
         return outputStream -> {
             try {

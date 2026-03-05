@@ -1,0 +1,22 @@
+# container-manager/.air.toml
+root = "."
+tmp_dir = "tmp"
+
+[build]
+# Собираем бинарник с отключенными оптимизациями (-N -l), чтобы дебаггер работал корректно
+cmd = "go build -gcflags='all=-N -l' -o ./tmp/main ."
+
+# Запускаем собранный бинарник через Delve для удаленной отладки
+bin = "tmp/main"
+full_bin = "dlv --listen=:5005 --headless=true --api-version=2 --accept-multiclient exec ./tmp/main"
+
+# Расширения файлов, при изменении которых будет триггериться ребилд
+include_ext = ["go", "tpl", "tmpl", "html", "env"]
+# Исключаем папку с билдом
+exclude_dir = ["tmp", "vendor"]
+
+[color]
+build = "yellow"
+main = "magenta"
+runner = "green"
+watcher = "cyan"

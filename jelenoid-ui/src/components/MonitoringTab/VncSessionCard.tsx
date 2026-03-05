@@ -8,6 +8,8 @@ const VncSessionCard: React.FC<Props> = ({ sessionId }) => {
     const base  = import.meta.env.VITE_SERVER_BASE_URL;
     const wsUrl = `${base.replace(/^http/, 'ws')}/vnc/${sessionId}`;
 
+    console.log('[VNC]', { base, wsUrl, sessionId });
+
     const cardRef               = useRef<HTMLDivElement>(null);
     const [fullscreen, setFS]    = useState(false);
     const [connected,  setConn] = useState(false);
