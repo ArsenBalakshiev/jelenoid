@@ -45,6 +45,8 @@ public class SeleniumSessionService {
     private int serverPort;
     @Value("${jelenoid.auth.token:}")
     private String authToken;
+    @Value("${jelenoid.public.host:}")
+    private String publicHost;
 
     @Autowired
     private BrowserManagerService browserManagerService;
@@ -147,7 +149,14 @@ public class SeleniumSessionService {
                 }
             }
 
-            String devToolsUrl = String.format("ws://%s:%d/session/%s/se/cdp", serverAddress, serverPort, hubSessionId);
+            String effectiveHost = (publicHost != null && !publicHost.isBlank()) ? publicHost : serverAddress;
+            if ("0.0.0.0".equals(effectiveHost)) {
+                log.warn("The advertised host is '0.0.0.0'. This is likely incorrect. " +
+                         "Please set 'jelenoid.public.host' or the 'JELENOID_PUBLIC_HOST' env var " +
+                         "to the externally accessible IP or hostname of this server.");
+            }
+
+            String devToolsUrl = String.format("ws://%s:%d/session/%s/se/cdp", effectiveHost, serverPort, hubSessionId);
             containerCapabilities.put("se:cdp", devToolsUrl);
             log.info("Advertising 'se:cdp' endpoint: {}", devToolsUrl);
 

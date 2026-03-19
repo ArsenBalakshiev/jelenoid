@@ -12,6 +12,8 @@ spring:
     name: jelenoid
 
 jelenoid:
+  public:
+    host: ${JELENOID_PUBLIC_HOST:0.0.0.0}
   auth:
     token: ${JELENOID_AUTH_TOKEN:}
   container-manager:
