@@ -92,3 +92,4 @@ tests/target/
 
 container-manager/target/
 /build
+container-manager/go.sum

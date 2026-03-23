@@ -11,13 +11,16 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 public class DevToolsProxySocketHandler extends TextWebSocketHandler {
 
     private static final Logger log = LoggerFactory.getLogger(DevToolsProxySocketHandler.class);
     private final URI targetUri;
-    private WebSocketSession targetSession;
+    private volatile WebSocketSession targetSession;
+    private final CountDownLatch connectionLatch = new CountDownLatch(1);
 
     public DevToolsProxySocketHandler(URI targetUri) {
         this.targetUri = targetUri;
@@ -37,6 +40,14 @@ public class DevToolsProxySocketHandler extends TextWebSocketHandler {
                     clientSession.sendMessage(message);
                 }
             }
+
+            @Override
+            public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+                log.info("CDP Proxy: Target connection closed. Closing client session: {}", clientSession.getId());
+                if (clientSession.isOpen()) {
+                    clientSession.close(status);
+                }
+            }
         };
 
         try {
@@ -45,14 +56,25 @@ public class DevToolsProxySocketHandler extends TextWebSocketHandler {
         } catch (InterruptedException | ExecutionException e) {
             log.error("CDP Proxy: Failed to connect to target WebSocket", e);
             clientSession.close(CloseStatus.SERVER_ERROR);
+        } finally {
+            connectionLatch.countDown();
         }
     }
 
     @Override
     protected void handleTextMessage(WebSocketSession clientSession, TextMessage message) throws IOException {
+        try {
+            connectionLatch.await(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("CDP Proxy: Interrupted while waiting for connection to establish");
+        }
+
         if (targetSession != null && targetSession.isOpen()) {
             log.debug("CDP Proxy: Forwarding message from client to container: {}", message.getPayload());
             targetSession.sendMessage(message);
+        } else {
+            log.warn("CDP Proxy: Dropping message because target session is not open: {}", message.getPayload());
         }
     }
 
