@@ -27,6 +27,11 @@ public class DevToolsProxySocketHandler extends TextWebSocketHandler {
     }
 
     @Override
+    public boolean supportsPartialMessages() {
+        return true;
+    }
+
+    @Override
     public void afterConnectionEstablished(WebSocketSession clientSession) throws Exception {
         log.info("CDP Proxy: Client-side connection established: {}. Attempting to connect to target: {}", clientSession.getId(), targetUri);
 
@@ -34,9 +39,17 @@ public class DevToolsProxySocketHandler extends TextWebSocketHandler {
 
         TextWebSocketHandler forwardToClientHandler = new TextWebSocketHandler() {
             @Override
+            public boolean supportsPartialMessages() {
+                return true;
+            }
+
+            @Override
             protected void handleTextMessage(WebSocketSession session, TextMessage message) throws IOException {
                 if (clientSession.isOpen()) {
-                    log.debug("CDP Proxy: Forwarding message from container to client: {}", message.getPayload());
+                    if (log.isTraceEnabled()) {
+                        log.trace("CDP Proxy: Forwarding message from container to client. Length: {}, isLast: {}", 
+                                message.getPayloadLength(), message.isLast());
+                    }
                     clientSession.sendMessage(message);
                 }
             }
@@ -71,10 +84,13 @@ public class DevToolsProxySocketHandler extends TextWebSocketHandler {
         }
 
         if (targetSession != null && targetSession.isOpen()) {
-            log.debug("CDP Proxy: Forwarding message from client to container: {}", message.getPayload());
+            if (log.isTraceEnabled()) {
+                log.trace("CDP Proxy: Forwarding message from client to container. Length: {}, isLast: {}", 
+                        message.getPayloadLength(), message.isLast());
+            }
             targetSession.sendMessage(message);
         } else {
-            log.warn("CDP Proxy: Dropping message because target session is not open: {}", message.getPayload());
+            log.warn("CDP Proxy: Dropping message because target session is not open");
         }
     }
 

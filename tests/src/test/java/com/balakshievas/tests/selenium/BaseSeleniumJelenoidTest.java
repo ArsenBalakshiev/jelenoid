@@ -13,7 +13,7 @@ import java.util.Map;
 public class BaseSeleniumJelenoidTest {
 
     protected static final String HUB_URL = System.getProperty("hub.url",
-            "http://192.168.1.4:4444/wd/hub");
+            "http://localhost:4444/wd/hub");
 
     protected static final String TOKEN = System.getenv().getOrDefault("JELENOID_TOKEN",
             "super-secret-password");

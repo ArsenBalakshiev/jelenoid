@@ -17,7 +17,6 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     private final PlaywrightVersionInterceptor playwrightVersionInterceptor = new PlaywrightVersionInterceptor();
 
-
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(

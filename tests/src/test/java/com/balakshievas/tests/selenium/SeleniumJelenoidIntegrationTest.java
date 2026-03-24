@@ -33,6 +33,43 @@ class SeleniumJelenoidIntegrationTest extends BaseSeleniumJelenoidTest {
     }
 
     @Test
+    @DisplayName("Воспроизведение ошибки 1009: слишком большое сообщение через DevTools")
+    void shouldReproduceBufferLimitError() throws MalformedURLException {
+        ChromeOptions chromeOptions = new ChromeOptions();
+        chromeOptions.addArguments("--remote-allow-origins=*", "--no-sandbox");
+
+        WebDriver driver = new Augmenter().augment(createDriver(chromeOptions));
+
+        if (driver instanceof HasDevTools hasDevTools) {
+            DevTools devTools = hasDevTools.getDevTools();
+            devTools.createSession();
+
+            // Включаем Runtime, чтобы ловить события консоли через WebSocket
+            devTools.send(org.openqa.selenium.devtools.v133.runtime.Runtime.enable());
+
+            // Выполняем JS-скрипт, который выведет строку размером 1 МБ в консоль.
+            // Браузер попытается отправить эту огромную строку по CDP-сокету (DevTools).
+            // Это должно переполнить стандартный 8KB буфер и уронить прокси-сокет.
+            JavascriptExecutor js = (JavascriptExecutor) driver;
+            js.executeScript("console.log('A'.repeat(1024 * 1024));");
+
+            // Дадим немного времени сообщению дойти и уронить сокет
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+
+            // Пытаемся сделать еще один вызов DevTools. 
+            // Он должен упасть, если сокет был закрыт с ошибкой 1009.
+            devTools.send(org.openqa.selenium.devtools.v133.runtime.Runtime.disable());
+            
+        } else {
+            Assertions.fail("Драйвер не поддерживает DevTools. Проверьте Augmenter.");
+        }
+    }
+
+    @Test
     @DisplayName("Комплексное взаимодействие с формой, скриншотами и DevTools")
     void shouldPerformComplexPageInteractions() throws MalformedURLException {
         ChromeOptions chromeOptions = new ChromeOptions();
@@ -89,7 +126,7 @@ class SeleniumJelenoidIntegrationTest extends BaseSeleniumJelenoidTest {
         options.setCapability("selenoid:options", selenoidOptions);
 
         WebDriver driver = createDriverWithOptions(options);
-        driver.get("http://host.docker.internal:8080");
+        driver.get("https://www.google.com");
 
         String sessionId = ((RemoteWebDriver) getDriver()).getSessionId().toString();
         System.out.println("VNC сессия активна. ID: " + sessionId);
@@ -123,7 +160,7 @@ class SeleniumJelenoidIntegrationTest extends BaseSeleniumJelenoidTest {
     }
 
     @Test
-    @DisplayName("проверка работы с некорректной версией браузера")
+    @DisplayName("Проверка работы с некорректной версией браузера")
     void testIncorrectVersion() {
         ChromeOptions options = new ChromeOptions();
         options.addArguments(
@@ -148,4 +185,5 @@ class SeleniumJelenoidIntegrationTest extends BaseSeleniumJelenoidTest {
                 "Должно быть сообщение о ненайденной версии браузера"
         );
     }
+
 }
