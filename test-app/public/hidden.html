@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hidden Elements Page</title>
+  <style>
+    #hiddenElement { display: none; }
+    #visibilityHidden { visibility: hidden; }
+  </style>
+</head>
+<body>
+  <h1>Hidden Elements Test</h1>
+  <button id="showBtn">Show</button>
+  <div id="hiddenElement">This was hidden (display: none)</div>
+  <div id="visibilityHidden">This is visibility hidden</div>
+  <script>
+    document.getElementById('showBtn').addEventListener('click', () => {
+      document.getElementById('hiddenElement').style.display = 'block';
+    });
+  </script>
+</body>
+</html>

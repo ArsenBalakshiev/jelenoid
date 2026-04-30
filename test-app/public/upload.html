@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upload Page</title>
+</head>
+<body>
+  <h1>File Upload Test</h1>
+  <input type="file" id="fileInput">
+  <button id="uploadBtn">Upload</button>
+  <div id="output"></div>
+  <script>
+    document.getElementById('uploadBtn').addEventListener('click', () => {
+      const file = document.getElementById('fileInput').files[0];
+      if (file) {
+        document.getElementById('output').textContent = 'File: ' + file.name + ', Size: ' + file.size;
+      }
+    });
+  </script>
+</body>
+</html>

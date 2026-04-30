@@ -119,6 +119,14 @@ services:
       POSTGRES_PASSWORD: metrics-password
     ports: [ "5432:5432" ]
 
+  test-app:
+    build: ./test-app
+    container_name: test-app
+    ports:
+      - "3000:3000"
+    networks:
+      - jelenoid-net
+
 networks:
   jelenoid-net:
     name: jelenoid-net

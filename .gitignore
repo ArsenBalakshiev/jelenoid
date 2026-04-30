@@ -95,3 +95,5 @@ container-manager/target/
 container-manager/go.sum
 
 .exe
+
+/test-app/node_modules
