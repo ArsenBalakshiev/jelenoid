@@ -241,8 +241,11 @@ func (s *SeleniumSessionService) ProcessQueue() {
 func (s *SeleniumSessionService) ProxyRequest(hubSessionID string, method string, relativePath string, headers http.Header, body []byte) (*http.Response, error) {
 	session := s.activeSessions.Get(hubSessionID)
 	if session == nil {
+		log.Printf("PROXY: Session %s not found. Active sessions: %d", hubSessionID, len(s.activeSessions.GetSeleniumActiveSessions()))
 		return nil, &HTTPError{StatusCode: http.StatusNotFound, Message: "Session not found: " + hubSessionID}
 	}
+
+	log.Printf("PROXY: Found session %s -> remote %s, method=%s path=%s", hubSessionID, session.RemoteSessionID, method, relativePath)
 
 	session.UpdateActivity()
 

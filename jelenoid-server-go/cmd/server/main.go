@@ -120,15 +120,21 @@ func main() {
 
 	mux.HandleFunc("/wd/hub/session/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
+		pathAfterSession := strings.TrimPrefix(path, "/wd/hub/session/")
+
 		if strings.HasSuffix(path, "/se/file") || strings.HasSuffix(path, "/file") {
 			if r.Method == http.MethodPost {
 				wdHubHandler.UploadFile(w, r)
 				return
 			}
 		}
+
 		if r.Method == http.MethodDelete {
-			wdHubHandler.DeleteSession(w, r)
-			return
+			parts := strings.Split(pathAfterSession, "/")
+			if len(parts) == 1 && parts[0] != "" {
+				wdHubHandler.DeleteSession(w, r)
+				return
+			}
 		}
 		wdHubHandler.ProxyRequest(w, r)
 	})

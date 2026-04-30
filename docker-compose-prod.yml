@@ -61,8 +61,8 @@ services:
       - "80:80"
     networks:
       - jelenoid-net
-    depends_on:
-      - jelenoid-server
+#    depends_on:
+#      - jelenoid-server
 
   nats:
     image: nats:2.10

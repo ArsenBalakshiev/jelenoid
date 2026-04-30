@@ -29,6 +29,7 @@ services:
     environment:
       - BROWSERS_FILE=/app/browsers.json
       - CONTAINER_MANAGER_ADDRESS=http://container-manager:8080
+      - UI_HOSTS_LIST=http://localhost:3000,http://localhost:4444,http://localhost,http://localhost:5173
     volumes:
       - ./browsers.json:/app/browsers.json:ro
       - ./jelenoid-server-go:/app

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -68,7 +69,7 @@ func getEnvInt64(key string, fallback int64) int64 {
 
 func getEnvSlice(key string, fallback []string) []string {
 	if v := os.Getenv(key); v != "" {
-		return []string{v}
+		return strings.Split(v, ",")
 	}
 	return fallback
 }

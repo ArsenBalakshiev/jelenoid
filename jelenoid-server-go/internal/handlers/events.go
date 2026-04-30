@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/balakshievas/jelenoid-server-go/internal/services"
@@ -15,5 +16,6 @@ func NewEventsHandler(hub *services.SSEHub) *EventsHandler {
 }
 
 func (h *EventsHandler) Subscribe(w http.ResponseWriter, r *http.Request) {
+	log.Printf("EVENTS: Request received from %s", r.RemoteAddr)
 	h.hub.ServeHTTP(w, r)
 }

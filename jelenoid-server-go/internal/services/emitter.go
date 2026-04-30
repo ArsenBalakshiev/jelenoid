@@ -85,6 +85,15 @@ func (h *SSEHub) Broadcast(event SSEEvent) {
 }
 
 func (h *SSEHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	log.Printf("SSEHub: Serving /events from %s", r.RemoteAddr)
+
+	origin := r.Header.Get("Origin")
+	if origin != "" {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Expose-Headers", "Content-Type, Cache-Control, Connection, X-Accel-Buffering")
+	}
+
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
