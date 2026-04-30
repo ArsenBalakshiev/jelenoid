@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Slow Page</title>
+</head>
+<body>
+  <h1>Slow Loading Page</h1>
+  <p>This page takes 5 seconds to load</p>
+  <button id="startBtn">Start loading</button>
+  <div id="result" style="display:none;">Done!</div>
+  <script>
+    document.getElementById('startBtn').addEventListener('click', () => {
+      document.getElementById('startBtn').disabled = true;
+      setTimeout(() => {
+        document.getElementById('result').style.display = 'block';
+      }, 5000);
+    });
+  </script>
+</body>
+</html>

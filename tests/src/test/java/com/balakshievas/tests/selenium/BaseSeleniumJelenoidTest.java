@@ -1,6 +1,7 @@
 package com.balakshievas.tests.selenium;
 
 import org.junit.jupiter.api.AfterEach;
+import org.openqa.selenium.NoAlertPresentException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.remote.RemoteWebDriver;
@@ -23,6 +24,7 @@ public class BaseSeleniumJelenoidTest {
     protected WebDriver createDriver(ChromeOptions specificOptions) throws MalformedURLException {
         ChromeOptions options = new ChromeOptions();
         options.setBrowserVersion("133");
+        options.setCapability("unhandledPromptBehavior", "accept");
 
         Map<String, Object> selenoidOptions = new HashMap<>();
         selenoidOptions.put("enableVNC", true);
@@ -70,6 +72,9 @@ public class BaseSeleniumJelenoidTest {
         WebDriver driver = driverThreadLocal.get();
         if (driver != null) {
             try {
+                try {
+                    driver.switchTo().alert().dismiss();
+                } catch (NoAlertPresentException ignored) {}
                 driver.quit();
             } catch (Exception e) {
                 System.err.println("Failed to quit driver: " + e.getMessage());

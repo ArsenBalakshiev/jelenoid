@@ -1,0 +1,12 @@
+{
+  "name": "jelenoid-test-app",
+  "version": "1.0.0",
+  "description": "Test Application for Jelenoid E2E testing",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

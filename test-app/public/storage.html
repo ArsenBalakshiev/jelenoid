@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Storage Page</title>
+</head>
+<body>
+  <h1>LocalStorage Test</h1>
+  <button id="setBtn">Set LocalStorage</button>
+  <button id="getBtn">Get LocalStorage</button>
+  <div id="display"></div>
+  <script>
+    document.getElementById('setBtn').addEventListener('click', () => {
+      localStorage.setItem('testKey', 'testValue');
+      localStorage.setItem('anotherKey', 'anotherValue');
+    });
+    document.getElementById('getBtn').addEventListener('click', () => {
+      const key1 = localStorage.getItem('testKey');
+      const key2 = localStorage.getItem('anotherKey');
+      document.getElementById('display').textContent = 'testKey: ' + key1 + ', anotherKey: ' + key2;
+    });
+  </script>
+</body>
+</html>

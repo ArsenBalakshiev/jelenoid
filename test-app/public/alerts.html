@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alerts Page</title>
+</head>
+<body>
+  <h1>Alerts Test</h1>
+  <button id="alertBtn">Alert</button>
+  <button id="confirmBtn">Confirm</button>
+  <button id="promptBtn">Prompt</button>
+  <script>
+    document.getElementById('alertBtn').addEventListener('click', () => {
+      alert('Hello');
+    });
+    document.getElementById('confirmBtn').addEventListener('click', () => {
+      confirm('Continue?');
+    });
+    document.getElementById('promptBtn').addEventListener('click', () => {
+      prompt('Enter name');
+    });
+  </script>
+</body>
+</html>
