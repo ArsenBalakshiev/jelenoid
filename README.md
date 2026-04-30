@@ -167,6 +167,11 @@ To build the metrics image:
 docker build -t suomessa/jelenoid:metrics-latest .\service-metrics\.
 ```
 
+To build the test-app image:
+```shell
+docker build -t suomessa/jelenoid:test-app-latest .\test-app\.
+```
+
 Demo nginx for tests:
 ```shell
 docker run -d --name mynginx -p 8080:80 nginx
