@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile.dev
     container_name: jelenoid-server
     ports:
-      - "4444:4444"
+      - "4445:4444"
       - "5005:5005"
     environment:
       - BROWSERS_FILE=/app/browsers.json

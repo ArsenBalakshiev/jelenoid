@@ -179,9 +179,21 @@ func main() {
 		http.NotFound(w, r)
 	})
 
-	mux.HandleFunc("/playwright", playwrightService.ServeHTTP)
-	mux.HandleFunc("/playwright-", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/playwright", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("MUX: /playwright matched, path=%s", r.URL.Path)
 		playwrightService.ServeHTTP(w, r)
+	})
+	mux.HandleFunc("/playwright/", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("MUX: /playwright/ matched, path=%s", r.URL.Path)
+		playwrightService.ServeHTTP(w, r)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/playwright-") {
+			log.Printf("MUX: catch-all /playwright- matched, path=%s", r.URL.Path)
+			playwrightService.ServeHTTP(w, r)
+			return
+		}
+		http.NotFound(w, r)
 	})
 
 	handler := handlers.CORSMiddleware(cfg.UIHosts, mux)

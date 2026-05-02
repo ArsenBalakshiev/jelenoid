@@ -61,8 +61,8 @@ services:
       - "80:80"
     networks:
       - jelenoid-net
-#    depends_on:
-#      - jelenoid-server
+    depends_on:
+#     - jelenoid-server
 
   nats:
     image: nats:2.10
@@ -89,14 +89,6 @@ services:
       POSTGRES_USER: metrics-user
       POSTGRES_PASSWORD: metrics-password
     ports: [ "5432:5432" ]
-
-  test-app:
-    image: suomessa/jelenoid:test-app-latest
-    container_name: test-app
-    ports:
-      - "3000:3000"
-    networks:
-      - jelenoid-net
 
 networks:
   jelenoid-net:

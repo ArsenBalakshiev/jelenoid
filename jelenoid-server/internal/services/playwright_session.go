@@ -48,6 +48,8 @@ func NewPlaywrightSessionService(
 }
 
 func (s *PlaywrightSessionService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Playwright WS: Request received: %s %s", r.Method, r.URL.Path)
+
 	conn, err := s.wsUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("Playwright WS: Failed to upgrade: %v", err)
@@ -66,6 +68,7 @@ func (s *PlaywrightSessionService) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	}
 
 	playwrightVersion := s.getPlaywrightVersion(r.URL.Path)
+	log.Printf("Playwright WS: Extracted version: '%s' from path: %s", playwrightVersion, r.URL.Path)
 
 	copyHeaders := make(http.Header)
 	for key, values := range r.Header {
@@ -103,9 +106,12 @@ func (s *PlaywrightSessionService) ServeHTTP(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *PlaywrightSessionService) getPlaywrightVersion(path string) string {
-	idx := strings.LastIndex(path, "-")
-	if idx > 0 && strings.HasPrefix(path, "/playwright-") {
-		return path[idx+1:]
+	// Handle /playwright-1.58.0 or /playwright/1.58.0
+	if strings.HasPrefix(path, "/playwright-") {
+		return strings.TrimPrefix(path, "/playwright-")
+	}
+	if strings.HasPrefix(path, "/playwright/") {
+		return strings.TrimPrefix(path, "/playwright/")
 	}
 	return ""
 }
