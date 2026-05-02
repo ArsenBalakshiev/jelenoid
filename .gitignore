@@ -94,8 +94,9 @@ container-manager/target/
 /build
 container-manager/go.sum
 
-.exe
+*.exe
 
 /test-app/node_modules
 
 jelenoid-server-java/target/
+

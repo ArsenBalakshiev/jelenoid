@@ -62,7 +62,7 @@ services:
     networks:
       - jelenoid-net
     depends_on:
-#     - jelenoid-server
+     - jelenoid-server
 
   nats:
     image: nats:2.10
