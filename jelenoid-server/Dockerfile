@@ -1,31 +1,21 @@
-FROM maven:3.9.6-eclipse-temurin-21 AS builder
+FROM golang:1.24-alpine AS builder
 WORKDIR /build
 
-COPY pom.xml .
-RUN mvn dependency:go-offline -B
+COPY go.mod go.sum ./
+RUN go mod download
 
-COPY src ./src
-RUN mvn clean package -DskipTests -B
+COPY . .
+RUN CGO_ENABLED=0 go build -o jelenoid-server ./cmd/server
 
-FROM eclipse-temurin:21-jre-jammy AS extractor
-WORKDIR /extracted
-COPY --from=builder /build/target/jelenoid-0.0.1-SNAPSHOT.jar app.jar
-RUN java -Djarmode=layertools -jar app.jar extract
-
-FROM eclipse-temurin:21-jre-jammy
+FROM alpine:3.21
 WORKDIR /app
 
-RUN groupadd --system spring && useradd --system --gid spring --no-create-home spring
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
-COPY --from=extractor /extracted/dependencies/ ./
-COPY --from=extractor /extracted/spring-boot-loader/ ./
-COPY --from=extractor /extracted/snapshot-dependencies/ ./
-COPY --from=extractor /extracted/application/ ./
+COPY --from=builder /build/jelenoid-server .
 
-USER spring
+USER appuser
 
 EXPOSE 4444
 
-ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
-
-ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS org.springframework.boot.loader.launch.JarLauncher"]
+ENTRYPOINT ["./jelenoid-server"]
