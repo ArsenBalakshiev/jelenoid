@@ -23,3 +23,7 @@ func (n *StatusNotifier) OnStatusChanged() {
 		Data:  status,
 	})
 }
+
+func (n *StatusNotifier) GetStatus() interface{} {
+	return n.statusSvc.BuildStatus()
+}

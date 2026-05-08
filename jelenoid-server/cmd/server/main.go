@@ -87,6 +87,13 @@ func main() {
 	statusService := services.NewStatusService(activeSessions)
 	statusNotifier := services.NewStatusNotifier(sseHub, statusService)
 
+	sseHub.SetInitialDataBuilder(func() services.SSEEvent {
+		return services.SSEEvent{
+			Event: "state-update",
+			Data:  statusNotifier.GetStatus(),
+		}
+	})
+
 	playwrightService := services.NewPlaywrightSessionService(
 		activeSessions,
 		dockerService,

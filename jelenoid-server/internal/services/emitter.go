@@ -48,14 +48,21 @@ type SSEEvent struct {
 }
 
 type SSEHub struct {
-	subscribers map[chan SSEEvent]bool
-	mu          sync.RWMutex
+	subscribers         map[chan SSEEvent]bool
+	mu                 sync.RWMutex
+	initialDataBuilder func() SSEEvent
 }
 
 func NewSSEHub() *SSEHub {
 	return &SSEHub{
 		subscribers: make(map[chan SSEEvent]bool),
 	}
+}
+
+func (h *SSEHub) SetInitialDataBuilder(builder func() SSEEvent) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.initialDataBuilder = builder
 }
 
 func (h *SSEHub) Subscribe() chan SSEEvent {
@@ -107,6 +114,19 @@ func (h *SSEHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	ch := h.Subscribe()
 	defer h.Unsubscribe(ch)
+
+	h.mu.RLock()
+	initialBuilder := h.initialDataBuilder
+	h.mu.RUnlock()
+
+	if initialBuilder != nil {
+		initialEvent := initialBuilder()
+		data, err := json.Marshal(initialEvent.Data)
+		if err == nil {
+			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", initialEvent.Event, string(data))
+			flusher.Flush()
+		}
+	}
 
 	ctx := r.Context()
 	for {

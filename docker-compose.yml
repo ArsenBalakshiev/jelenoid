@@ -7,32 +7,32 @@ services:
       dockerfile: Dockerfile.dev
     container_name: jelenoid-server
     ports:
-      - "4445:4444"
-      - "5005:5005"
+      - "4444:4444"
+      - "5006:5005"
     environment:
       - BROWSERS_FILE=/app/browsers.json
       - CONTAINER_MANAGER_ADDRESS=http://container-manager:8080
     volumes:
       - ./browsers.json:/app/browsers.json:ro
-      - ./jelenoid-server/src:/app/src
-      - ./jelenoid-server/target:/app/target
+      - ./jelenoid-server:/app
+      - go-mod-cache:/go/pkg/mod
     networks:
       - jelenoid-net
 
-  container-manager-java:
-    build:
-      context: ./container-manager-java
-      dockerfile: Dockerfile.dev
-    container_name: container-manager-java
-    ports:
-      - "8080:8080"
-      - "5006:5005"
-    volumes:
-      - ./container-manager/src:/app/src
-      - ./container-manager/target:/app/target
-      - /var/run/docker.sock:/var/run/docker.sock
-    networks:
-      - jelenoid-net
+#  container-manager-java:
+#    build:
+#      context: ./container-manager-java
+#      dockerfile: Dockerfile.dev
+#    container_name: container-manager-java
+#    ports:
+#      - "8080:8080"
+#      - "5006:5005"
+#    volumes:
+#      - ./container-manager/src:/app/src
+#      - ./container-manager/target:/app/target
+#      - /var/run/docker.sock:/var/run/docker.sock
+#    networks:
+#      - jelenoid-net
 
   container-manager:
     build:
@@ -41,7 +41,7 @@ services:
     container_name: container-manager
     ports:
       - "8080:8080"
-      - "5006:5005"
+      - "5007:5005"
     volumes:
       - ./container-manager:/app
       - /var/run/docker.sock:/var/run/docker.sock
