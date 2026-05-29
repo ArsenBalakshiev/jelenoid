@@ -2,12 +2,12 @@ package services
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -46,7 +46,6 @@ func NewSeleniumSessionService(
 		MaxIdleConnsPerHost: 500,
 		MaxConnsPerHost:     500,
 		IdleConnTimeout:     60 * time.Second,
-		DisableKeepAlives:   true,
 		DisableCompression:  true,
 	}
 	return &SeleniumSessionService{
@@ -64,7 +63,7 @@ func NewSeleniumSessionService(
 			Transport: proxyTransport,
 		},
 		proxyClient: &http.Client{
-			Timeout:   0,
+			Timeout: 300 * time.Second,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
@@ -87,6 +86,10 @@ func (s *SeleniumSessionService) CreateSessionOrQueue(requestBody map[string]int
 			return nil, err
 		}
 		return result, nil
+	}
+
+	if !s.activeSessions.IsQueueEnabled() {
+		return nil, &HTTPError{StatusCode: http.StatusServiceUnavailable, Message: "No free slots. Queue is disabled."}
 	}
 
 	log.Printf("No free slots. Adding request to queue. In-progress: %d/%d, Queue: %d",
@@ -217,24 +220,24 @@ func (s *SeleniumSessionService) DeleteSession(hubSessionID string) {
 }
 
 func (s *SeleniumSessionService) ProcessQueue() {
-	if s.activeSessions.GetQueueSize() > 0 {
-		if s.activeSessions.TryReserveSlot() {
-			nextRequest := s.activeSessions.PollFromQueue()
-			s.dispatchStatusUpdate()
-			if nextRequest != nil {
-				log.Println("Processing next request from queue...")
-				result, err := s.createSessionInternal(nextRequest.RequestBody)
-				if err != nil {
-					s.activeSessions.ReleaseSlot()
-					nextRequest.Future <- dto.PendingRequestResult{Err: err}
-					s.ProcessQueue()
-				} else {
-					nextRequest.Future <- dto.PendingRequestResult{Response: result}
-				}
-			} else {
-				s.activeSessions.ReleaseSlot()
-			}
+	for s.activeSessions.GetQueueSize() > 0 {
+		if !s.activeSessions.TryReserveSlot() {
+			return
 		}
+		nextRequest := s.activeSessions.PollFromQueue()
+		s.dispatchStatusUpdate()
+		if nextRequest == nil {
+			s.activeSessions.ReleaseSlot()
+			continue
+		}
+		log.Println("Processing next request from queue...")
+		result, err := s.createSessionInternal(nextRequest.RequestBody)
+		if err != nil {
+			s.activeSessions.ReleaseSlot()
+			nextRequest.Future <- dto.PendingRequestResult{Err: err}
+			continue
+		}
+		nextRequest.Future <- dto.PendingRequestResult{Response: result}
 	}
 }
 
@@ -244,8 +247,6 @@ func (s *SeleniumSessionService) ProxyRequest(hubSessionID string, method string
 		log.Printf("PROXY: Session %s not found. Active sessions: %d", hubSessionID, len(s.activeSessions.GetSeleniumActiveSessions()))
 		return nil, &HTTPError{StatusCode: http.StatusNotFound, Message: "Session not found: " + hubSessionID}
 	}
-
-	log.Printf("PROXY: Found session %s -> remote %s, method=%s path=%s", hubSessionID, session.RemoteSessionID, method, relativePath)
 
 	session.UpdateActivity()
 
@@ -289,12 +290,12 @@ func (s *SeleniumSessionService) UploadFileToSession(hubSessionID string, fileBy
 	return s.dockerService.CopyFileToContainer(session.ContainerInfo.ContainerID, fileBytes)
 }
 
-func (s *SeleniumSessionService) StreamLogsForSession(hubSessionID string) (<-chan []byte, error) {
+func (s *SeleniumSessionService) StreamLogsForSession(ctx context.Context, hubSessionID string) (<-chan []byte, error) {
 	session := s.activeSessions.Get(hubSessionID)
 	if session == nil {
 		return nil, &HTTPError{StatusCode: http.StatusNotFound, Message: "Session not found: " + hubSessionID}
 	}
-	return s.dockerService.StreamContainerLogs(session.ContainerInfo.ContainerID)
+	return s.dockerService.StreamContainerLogs(ctx, session.ContainerInfo.ContainerID)
 }
 
 func (s *SeleniumSessionService) dispatchStatusUpdate() {
@@ -426,12 +427,4 @@ type HTTPError struct {
 
 func (e *HTTPError) Error() string {
 	return e.Message
-}
-
-func encodeMap(m map[string]interface{}) string {
-	vals := url.Values{}
-	for k, v := range m {
-		vals.Set(k, fmt.Sprintf("%v", v))
-	}
-	return vals.Encode()
 }

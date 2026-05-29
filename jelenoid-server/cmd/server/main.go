@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"log"
 	"net/http"
@@ -70,6 +69,7 @@ func main() {
 		dockerService,
 		sessionPublisher,
 		statusChan,
+		cfg.EnableQueue,
 	)
 	seleniumService := services.NewSeleniumSessionService(
 		activeSessions,
@@ -250,8 +250,4 @@ func main() {
 	}
 
 	log.Println("Server exited")
-}
-
-func init() {
-	_ = base64.StdEncoding
 }

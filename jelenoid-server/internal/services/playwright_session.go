@@ -84,6 +84,7 @@ func (s *PlaywrightSessionService) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	pair := &PlaywrightSessionPair{
 		ClientConn:     conn,
 		RequestHeaders: copyHeaders,
+		Version:        playwrightVersion,
 	}
 	s.activeSessions.PutPlaywrightActiveSession(conn, pair)
 	log.Printf("Session %s: Connection received.", conn.RemoteAddr().String())
@@ -92,6 +93,13 @@ func (s *PlaywrightSessionService) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		log.Printf("Session %s: Slot acquired immediately. Starting proxy.", conn.RemoteAddr().String())
 		go s.startProxyForSession(conn, pair, playwrightVersion)
 	} else {
+		if !s.activeSessions.IsQueueEnabled() {
+			log.Printf("Session %s: No available slots, queue disabled. Rejecting.", conn.RemoteAddr().String())
+			conn.WriteMessage(websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "No free slots. Queue is disabled."))
+			conn.Close()
+			return
+		}
 		log.Printf("Session %s: No available slots. Attempting to queue.", conn.RemoteAddr().String())
 		enqueued := s.activeSessions.OfferPlaywrightQueue(pair)
 		if !enqueued {
@@ -175,7 +183,7 @@ func (s *PlaywrightSessionService) startProxyForSession(clientConn *websocket.Co
 
 	pair.Lock.Lock()
 	pair.ContainerConn = containerConn
-	pair.ConnectionEstablished = true
+	pair.ConnectionEstablished.Store(true)
 	for _, msg := range pair.PendingMessages {
 		containerConn.WriteMessage(websocket.TextMessage, msg)
 	}
@@ -199,8 +207,9 @@ func (s *PlaywrightSessionService) startProxyForSession(clientConn *websocket.Co
 				}
 				return
 			}
-			if pair.ContainerInfo != nil {
-				pair.ContainerInfo.UpdateActivity()
+			ci := pair.ContainerInfo
+			if ci != nil {
+				ci.UpdateActivity()
 			}
 			if err := clientConn.WriteMessage(messageType, message); err != nil {
 				log.Printf("Session %s: Failed to send message to client: %v", clientConn.RemoteAddr().String(), err)
@@ -218,16 +227,22 @@ func (s *PlaywrightSessionService) startProxyForSession(clientConn *websocket.Co
 			break
 		}
 
-		pair.Lock.Lock()
-		if pair.ContainerInfo != nil {
-			pair.ContainerInfo.UpdateActivity()
+		ci := pair.ContainerInfo
+		if ci != nil {
+			ci.UpdateActivity()
 		}
-		if pair.ConnectionEstablished {
+		if pair.ConnectionEstablished.Load() {
 			containerConn.WriteMessage(messageType, message)
 		} else {
-			pair.PendingMessages = append(pair.PendingMessages, message)
+			pair.Lock.Lock()
+			if pair.ConnectionEstablished.Load() {
+				pair.Lock.Unlock()
+				containerConn.WriteMessage(messageType, message)
+			} else {
+				pair.PendingMessages = append(pair.PendingMessages, message)
+				pair.Lock.Unlock()
+			}
 		}
-		pair.Lock.Unlock()
 	}
 
 	containerConn.WriteMessage(websocket.CloseMessage,
@@ -250,7 +265,7 @@ func (s *PlaywrightSessionService) handleDisconnect(clientConn *websocket.Conn, 
 		nextPair := s.activeSessions.PollFromPlaywrightQueue()
 		if nextPair != nil {
 			log.Printf("Session: Slot is being passed to queued session.")
-			go s.startProxyForSession(nextPair.ClientConn, nextPair, "")
+			go s.startProxyForSession(nextPair.ClientConn, nextPair, nextPair.Version)
 		} else {
 			s.activeSessions.ReleasePlaywrightSlot()
 			log.Printf("Slot released. Queue is empty. Available slots: %d.", s.activeSessions.AvailablePlaywrightSlots())

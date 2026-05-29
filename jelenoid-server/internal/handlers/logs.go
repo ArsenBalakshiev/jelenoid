@@ -23,7 +23,7 @@ func (h *LogsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	sessionID := parts[1]
 
-	ch, err := h.seleniumService.StreamLogsForSession(sessionID)
+	ch, err := h.seleniumService.StreamLogsForSession(r.Context(), sessionID)
 	if err != nil {
 		if httpErr, ok := err.(*services.HTTPError); ok {
 			http.Error(w, httpErr.Message, httpErr.StatusCode)

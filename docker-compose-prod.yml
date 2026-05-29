@@ -2,13 +2,39 @@ version: '3.8'
 
 services:
   jelenoid-server:
-    image: suomessa/jelenoid:server-latest
+    image: suomessa/jelenoid:server-perf-latest
     container_name: jelenoid-server
     ports:
       - "4444:4444"
     volumes:
       - "./browsers.json:/app/browsers.json:ro"
     environment:
+      - JELENOID_PORT=4444
+      - PARALLEL_SESSIONS=10
+      - QUEUE_LIMIT=100
+      - BROWSERS_FILE=/app/browsers.json
+      - QUEUE_TIMEOUT=30000
+      - SESSION_TIMEOUT=600000
+      - STARTUP_TIMEOUT=30000
+      - UI_HOSTS_LIST=http://localhost:80,http://localhost,http://localhost:3000
+      - PLAYWRIGHT_SESSION_LIMIT=10
+      - PLAYWRIGHT_QUEUE_LIMIT=100
+      - NATS_SERVER=nats://nats:4222
+      - CONTAINER_MANAGER_ADDRESS=http://container-manager:8080
+      - JELENOID_PUBLIC_HOST=0.0.0.0   #required!!!
+    networks:
+      - jelenoid-net
+
+  jelenoid-server-perf:
+    image: suomessa/jelenoid:server-perf-latest
+    container_name: jelenoid-server-perf
+    ports:
+      - "4445:4445"
+    volumes:
+      - "./browsers.json:/app/browsers.json:ro"
+    environment:
+      - ENABLE_QUEUE=false
+      - JELENOID_PORT=4445
       - PARALLEL_SESSIONS=10
       - QUEUE_LIMIT=100
       - BROWSERS_FILE=/app/browsers.json

@@ -21,6 +21,7 @@ type Config struct {
 	PlaywrightMaxSessions int
 	PlaywrightQueueLimit  int
 	NATSServer           string
+	EnableQueue          bool
 }
 
 func Load() *Config {
@@ -39,6 +40,7 @@ func Load() *Config {
 		PlaywrightMaxSessions: getEnvInt("PLAYWRIGHT_SESSION_LIMIT", 10),
 		PlaywrightQueueLimit:  getEnvInt("PLAYWRIGHT_QUEUE_LIMIT", 100),
 		NATSServer:           getEnvStr("NATS_SERVER", ""),
+		EnableQueue:          getEnvBool("ENABLE_QUEUE", true),
 	}
 }
 
@@ -70,6 +72,15 @@ func getEnvInt64(key string, fallback int64) int64 {
 func getEnvSlice(key string, fallback []string) []string {
 	if v := os.Getenv(key); v != "" {
 		return strings.Split(v, ",")
+	}
+	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	if v := os.Getenv(key); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
 	}
 	return fallback
 }

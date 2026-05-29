@@ -2,12 +2,14 @@ package services
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/balakshievas/jelenoid-server-go/internal/dto"
 )
@@ -20,7 +22,9 @@ type DockerExternalService struct {
 func NewDockerExternalService(containerManagerAddr string) *DockerExternalService {
 	return &DockerExternalService{
 		containerManagerAddr: containerManagerAddr,
-		httpClient:           &http.Client{},
+		httpClient: &http.Client{
+			Timeout: 120 * time.Second,
+		},
 	}
 }
 
@@ -117,9 +121,9 @@ func (s *DockerExternalService) CopyFileToContainer(containerID string, fileByte
 	return strings.TrimSpace(string(body)), nil
 }
 
-func (s *DockerExternalService) StreamContainerLogs(containerID string) (<-chan []byte, error) {
+func (s *DockerExternalService) StreamContainerLogs(ctx context.Context, containerID string) (<-chan []byte, error) {
 	url := fmt.Sprintf("%s/api/containers/%s/logs", s.containerManagerAddr, containerID)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -141,11 +145,20 @@ func (s *DockerExternalService) StreamContainerLogs(containerID string) (<-chan 
 		defer resp.Body.Close()
 		buf := make([]byte, 1024)
 		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			n, err := resp.Body.Read(buf)
 			if n > 0 {
 				data := make([]byte, n)
 				copy(data, buf[:n])
-				ch <- data
+				select {
+				case ch <- data:
+				case <-ctx.Done():
+					return
+				}
 			}
 			if err != nil {
 				return

@@ -24,6 +24,12 @@ var vncUpgrader = websocket.Upgrader{
 	Subprotocols: []string{"binary"},
 }
 
+var vncBufPool = sync.Pool{
+	New: func() interface{} {
+		return make([]byte, 8192)
+	},
+}
+
 func (h *VncProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Printf("VNC: Request received: %s %s", r.Method, r.URL.Path)
 	parts := SplitPath(r.URL.Path)
@@ -54,7 +60,8 @@ func (h *VncProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	containerInfo := session.ContainerInfo
 	if containerInfo == nil {
 		log.Printf("VNC: Container info missing")
-		http.Error(w, "Container info missing", http.StatusInternalServerError)
+		clientConn.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "Container info missing"))
 		return
 	}
 
@@ -77,7 +84,8 @@ func (h *VncProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		defer wg.Done()
-		buf := make([]byte, 8192)
+		buf := vncBufPool.Get().([]byte)
+		defer vncBufPool.Put(buf)
 		for {
 			vncConn.SetReadDeadline(time.Now().Add(30 * time.Second))
 			n, err := vncConn.Read(buf)

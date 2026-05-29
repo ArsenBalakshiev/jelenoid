@@ -1,7 +1,7 @@
 package dto
 
 import (
-	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -17,7 +17,6 @@ type ContainerInfo struct {
 	ContainerName string    `json:"containerName"`
 	LastActivity  int64     `json:"lastActivity"`
 	StartTime     time.Time `json:"startTime"`
-	mu            sync.Mutex
 }
 
 func NewContainerInfo(containerID, containerName string) *ContainerInfo {
@@ -31,15 +30,11 @@ func NewContainerInfo(containerID, containerName string) *ContainerInfo {
 }
 
 func (c *ContainerInfo) UpdateActivity() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.LastActivity = time.Now().UnixMilli()
+	atomic.StoreInt64(&c.LastActivity, time.Now().UnixMilli())
 }
 
 func (c *ContainerInfo) GetLastActivity() int64 {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.LastActivity
+	return atomic.LoadInt64(&c.LastActivity)
 }
 
 type ContainerInfoRecord struct {
