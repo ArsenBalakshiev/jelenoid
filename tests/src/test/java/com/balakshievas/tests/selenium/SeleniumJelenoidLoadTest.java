@@ -70,8 +70,8 @@ public class SeleniumJelenoidLoadTest extends BaseSeleniumJelenoidTest {
             System.out.printf("[%s] Test #%d: Session created in %d ms. Session ID: %s%n",
                     threadName, testNumber, timeElapsed, ((RemoteWebDriver) driver).getSessionId());
 
-            driver.get("http://host.docker.internal:8080/");
-            Assertions.assertEquals("Welcome to nginx!", driver.getTitle());
+            driver.get("http://host.docker.internal:3000");
+            Assertions.assertEquals("Test App", driver.getTitle());
 
             // Используем ThreadLocalRandom вместо Math.random() в многопоточной среде
             Thread.sleep(ThreadLocalRandom.current().nextLong(1000, 3000));

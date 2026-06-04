@@ -1,15 +1,11 @@
-# container-manager/Dockerfile.dev
-FROM golang:1.25
-
+FROM --platform=linux/amd64 golang:1.25-alpine
 WORKDIR /app
 
-# Устанавливаем Air (hot-reload) и Delve (debugger)
-RUN go install github.com/air-verse/air@latest && \
-    go install github.com/go-delve/delve/cmd/dlv@latest
+RUN go install github.com/air-verse/air@v1.61.7
 
-# Копируем go.mod и go.sum для кэширования слоев
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Запускаем Air (он сам подхватит конфигурацию из .air.toml)
+COPY . .
+
 CMD ["air", "-c", ".air.toml"]

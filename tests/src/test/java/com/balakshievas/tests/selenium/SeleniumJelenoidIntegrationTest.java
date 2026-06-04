@@ -126,7 +126,7 @@ class SeleniumJelenoidIntegrationTest extends BaseSeleniumJelenoidTest {
         options.setCapability("selenoid:options", selenoidOptions);
 
         WebDriver driver = createDriverWithOptions(options);
-        driver.get("https://www.google.com");
+        driver.get("http://host.docker.internal:3000");
 
         String sessionId = ((RemoteWebDriver) getDriver()).getSessionId().toString();
         System.out.println("VNC сессия активна. ID: " + sessionId);

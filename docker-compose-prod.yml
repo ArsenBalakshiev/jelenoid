@@ -2,14 +2,14 @@ version: '3.8'
 
 services:
   jelenoid-server:
-    image: suomessa/jelenoid:server-perf-latest
+    image: suomessa/jelenoid:server-latest
     container_name: jelenoid-server
     ports:
-      - "4444:4444"
+      - "4445:4445"
     volumes:
       - "./browsers.json:/app/browsers.json:ro"
     environment:
-      - JELENOID_PORT=4444
+      - JELENOID_PORT=4445
       - PARALLEL_SESSIONS=10
       - QUEUE_LIMIT=100
       - BROWSERS_FILE=/app/browsers.json
@@ -25,16 +25,26 @@ services:
     networks:
       - jelenoid-net
 
-  jelenoid-server-perf:
-    image: suomessa/jelenoid:server-perf-latest
-    container_name: jelenoid-server-perf
+  selenoid:
+    container_name: selenoid
+    image: "llavskii/selenoid:latest"
+    network_mode: bridge
     ports:
-      - "4445:4445"
+      - "4444:4444"
+    volumes:
+      - "./browsers.json:/etc/selenoid/browsers.json:ro"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    command: [ "-conf", "/etc/selenoid/browsers.json"]
+
+  jelenoid-server-java:
+    image: suomessa/jelenoid:server-java-latest
+    container_name: jelenoid-server-java
+    ports:
+      - "4446:4446"
     volumes:
       - "./browsers.json:/app/browsers.json:ro"
     environment:
-      - ENABLE_QUEUE=false
-      - JELENOID_PORT=4445
+      - JELENOID_PORT=4446
       - PARALLEL_SESSIONS=10
       - QUEUE_LIMIT=100
       - BROWSERS_FILE=/app/browsers.json

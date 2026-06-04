@@ -17,6 +17,7 @@ type ContainerInfo struct {
 	ContainerName string    `json:"containerName"`
 	LastActivity  int64     `json:"lastActivity"`
 	StartTime     time.Time `json:"startTime"`
+	BaseURL       string    `json:"-"`
 }
 
 func NewContainerInfo(containerID, containerName string) *ContainerInfo {
@@ -24,6 +25,7 @@ func NewContainerInfo(containerID, containerName string) *ContainerInfo {
 		ContainerID:   containerID,
 		ContainerName: containerName,
 		StartTime:     time.Now(),
+		BaseURL:       "http://" + containerName + ":4444",
 	}
 	ci.UpdateActivity()
 	return ci
@@ -42,16 +44,6 @@ type ContainerInfoRecord struct {
 	ContainerName string `json:"containerName"`
 }
 
-type SessionInfo struct {
-	ID        string     `json:"id"`
-	StartTime *time.Time `json:"startTime"`
-	EndTime   *time.Time `json:"endTime"`
-	Platform  string     `json:"platform"`
-	Version   string     `json:"version"`
-	Status    string     `json:"status"`
-	EndedBy   string     `json:"endedBy"`
-}
-
 type SeleniumSession struct {
 	HubSessionID   string         `json:"hubSessionId"`
 	RemoteSessionID string        `json:"remoteSessionId"`
@@ -59,7 +51,6 @@ type SeleniumSession struct {
 	Version        string         `json:"version"`
 	VNCEnabled     bool           `json:"vncEnabled"`
 	ContainerInfo  *ContainerInfo `json:"containerInfo"`
-	SessionInfo     *SessionInfo  `json:"sessionInfo"`
 }
 
 func (s *SeleniumSession) UpdateActivity() {

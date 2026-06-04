@@ -14,7 +14,6 @@ import (
 	"github.com/balakshievas/jelenoid-server-go/internal/config"
 	"github.com/balakshievas/jelenoid-server-go/internal/handlers"
 	"github.com/balakshievas/jelenoid-server-go/internal/services"
-	"github.com/nats-io/nats.go"
 )
 
 func main() {
@@ -23,40 +22,6 @@ func main() {
 	statusChan := make(chan struct{}, 256)
 	sseHub := services.NewSSEHub()
 
-	var natsConn *nats.Conn
-	if cfg.NATSServer != "" {
-		var err error
-		natsConn, err = nats.Connect(cfg.NATSServer, nats.Timeout(2*time.Second))
-		if err != nil {
-			log.Printf("Failed to connect to NATS (%s): %v", cfg.NATSServer, err)
-		} else {
-			log.Println("Connected to NATS")
-			js, err := natsConn.JetStream()
-			if err == nil {
-				streamInfo, err := js.StreamInfo("SESSIONS")
-				if err != nil || streamInfo == nil {
-					_, err = js.AddStream(&nats.StreamConfig{
-						Name:     "SESSIONS",
-						Subjects: []string{"sessions.*"},
-						Storage:  nats.FileStorage,
-						Replicas: 1,
-					})
-					if err != nil {
-						log.Printf("JetStream not available: %v", err)
-					} else {
-						log.Println("Created JetStream stream 'SESSIONS'")
-					}
-				}
-			}
-		}
-	}
-	defer func() {
-		if natsConn != nil {
-			natsConn.Close()
-		}
-	}()
-
-	sessionPublisher := services.NewSessionPublisher(natsConn)
 	dockerService := services.NewDockerExternalService(cfg.ContainerManagerAddr)
 	browserManager := services.NewBrowserManagerService(cfg.BrowsersConfigDir)
 	activeSessions := services.NewActiveSessionsService(
@@ -67,7 +32,6 @@ func main() {
 		cfg.PlaywrightMaxSessions,
 		cfg.PlaywrightQueueLimit,
 		dockerService,
-		sessionPublisher,
 		statusChan,
 		cfg.EnableQueue,
 	)
@@ -75,11 +39,9 @@ func main() {
 		activeSessions,
 		browserManager,
 		dockerService,
-		sessionPublisher,
 		statusChan,
 		cfg.PublicHost,
 		cfg.ServerPort,
-		cfg.AuthToken,
 		cfg.PublicHost,
 	)
 	activeSessions.SetSeleniumService(seleniumService)
@@ -98,10 +60,8 @@ func main() {
 		activeSessions,
 		dockerService,
 		browserManager,
-		sessionPublisher,
 		statusChan,
 		cfg.SessionTimeoutMs,
-		cfg.AuthToken,
 	)
 
 	wdHubHandler := handlers.NewWdHubHandler(seleniumService)
@@ -186,17 +146,10 @@ func main() {
 		http.NotFound(w, r)
 	})
 
-	mux.HandleFunc("/playwright", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("MUX: /playwright matched, path=%s", r.URL.Path)
-		playwrightService.ServeHTTP(w, r)
-	})
-	mux.HandleFunc("/playwright/", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("MUX: /playwright/ matched, path=%s", r.URL.Path)
-		playwrightService.ServeHTTP(w, r)
-	})
+	mux.HandleFunc("/playwright", playwrightService.ServeHTTP)
+	mux.HandleFunc("/playwright/", playwrightService.ServeHTTP)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/playwright-") {
-			log.Printf("MUX: catch-all /playwright- matched, path=%s", r.URL.Path)
 			playwrightService.ServeHTTP(w, r)
 			return
 		}
@@ -204,7 +157,6 @@ func main() {
 	})
 
 	handler := handlers.CORSMiddleware(cfg.UIHosts, mux)
-	handler = handlers.LoggingMiddleware(handler)
 
 	go func() {
 		for range statusChan {

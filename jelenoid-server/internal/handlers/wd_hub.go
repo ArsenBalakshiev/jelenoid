@@ -4,12 +4,18 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
-	"log"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/balakshievas/jelenoid-server-go/internal/services"
 )
+
+var copyBufPool = sync.Pool{
+	New: func() interface{} {
+		return make([]byte, 32*1024)
+	},
+}
 
 type WdHubHandler struct {
 	seleniumService *services.SeleniumSessionService
@@ -64,18 +70,14 @@ func (h *WdHubHandler) ProxyRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	relativePath := r.URL.Path[idx+len("/wd/hub"):]
 
-	var bodyBytes []byte
+	var body io.Reader
+	var contentLength int64
 	if r.Method != "GET" && r.Body != nil {
-		var err error
-		bodyBytes, err = io.ReadAll(r.Body)
-		if err != nil {
-			WriteErrorJSON(w, http.StatusBadRequest, "Failed to read request body")
-			return
-		}
-		r.Body.Close()
+		body = r.Body
+		contentLength = r.ContentLength
 	}
 
-	resp, err := h.seleniumService.ProxyRequest(sessionID, r.Method, relativePath, r.Header, bodyBytes)
+	resp, err := h.seleniumService.ProxyRequest(sessionID, r.Method, relativePath, r.Header, body, contentLength)
 	if err != nil {
 		if httpErr, ok := err.(*services.HTTPError); ok {
 			WriteErrorJSON(w, httpErr.StatusCode, httpErr.Message)
@@ -86,15 +88,18 @@ func (h *WdHubHandler) ProxyRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
+	dst := w.Header()
 	for key, values := range resp.Header {
-		if !IsRestrictedHeader(key) {
-			for _, v := range values {
-				w.Header().Add(key, v)
-			}
+		switch key {
+		case "Content-Length", "Transfer-Encoding", "Host", "Connection", "Upgrade":
+			continue
 		}
+		dst[key] = values
 	}
 	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	buf := copyBufPool.Get().([]byte)
+	io.CopyBuffer(w, resp.Body, buf)
+	copyBufPool.Put(buf)
 }
 
 func (h *WdHubHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
@@ -137,24 +142,16 @@ func (h *WdHubHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func ExtractSessionID(path string) string {
-	parts := SplitPath(path)
-	idx := -1
-	for i, p := range parts {
-		if p == "session" && i+1 < len(parts) {
-			idx = i + 1
-			break
-		}
+	const marker = "/session/"
+	idx := strings.Index(path, marker)
+	if idx < 0 {
+		return ""
 	}
-	if idx >= 0 && idx < len(parts) {
-		return parts[idx]
+	rest := path[idx+len(marker):]
+	if i := strings.IndexByte(rest, '/'); i >= 0 {
+		return rest[:i]
 	}
-	return ""
-}
-
-func IsRestrictedHeader(name string) bool {
-	lower := strings.ToLower(name)
-	return lower == "content-length" || lower == "transfer-encoding" ||
-		lower == "host" || lower == "connection" || lower == "upgrade"
+	return rest
 }
 
 func WriteErrorJSON(w http.ResponseWriter, statusCode int, message string) {
@@ -169,9 +166,3 @@ func WriteErrorJSON(w http.ResponseWriter, statusCode int, message string) {
 	})
 }
 
-func LogMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("%s %s", r.Method, r.URL.Path)
-		next.ServeHTTP(w, r)
-	})
-}
