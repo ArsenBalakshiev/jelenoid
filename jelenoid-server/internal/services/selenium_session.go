@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"strings"
 	"time"
 
@@ -21,11 +22,11 @@ type SeleniumSessionService struct {
 	dockerService  *DockerExternalService
 	statusChan     chan struct{}
 
-	serverAddress string
-	serverPort    int
-	publicHost    string
-	httpClient    *http.Client
-	proxyClient   *http.Client
+	serverAddress  string
+	serverPort     int
+	publicHost     string
+	httpClient     *http.Client
+	proxyTransport http.RoundTripper
 }
 
 func NewSeleniumSessionService(
@@ -64,13 +65,7 @@ func NewSeleniumSessionService(
 			Timeout:   300 * time.Second,
 			Transport: proxyTransport,
 		},
-		proxyClient: &http.Client{
-			Timeout: 300 * time.Second,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-			Transport: proxyTransport,
-		},
+		proxyTransport: proxyTransport,
 	}
 }
 
@@ -173,7 +168,7 @@ func (s *SeleniumSessionService) createSessionInternal(requestBody map[string]in
 		VNCEnabled:      enableVNC,
 		ContainerInfo:   containerInfo,
 	}
-	s.activeSessions.SessionSuccessfullyCreated(hubSessionID, seleniumSession)
+	s.activeSessions.SessionSuccessfullyCreated(hubSessionID, seleniumSession, s.newReverseProxy(seleniumSession))
 	s.dispatchStatusUpdate()
 
 	containerCapabilities, _ := responseValue["capabilities"].(map[string]interface{})
@@ -226,30 +221,26 @@ func (s *SeleniumSessionService) ProcessQueue() {
 	}
 }
 
-func (s *SeleniumSessionService) ProxyRequest(hubSessionID string, method string, relativePath string, headers http.Header, body io.Reader, contentLength int64) (*http.Response, error) {
-	session := s.activeSessions.Get(hubSessionID)
-	if session == nil {
-		return nil, &HTTPError{StatusCode: http.StatusNotFound, Message: "Session not found: " + hubSessionID}
+func (s *SeleniumSessionService) newReverseProxy(session *dto.SeleniumSession) *httputil.ReverseProxy {
+	targetHost := session.ContainerInfo.ContainerName + ":4444"
+	hubID := session.HubSessionID
+	remoteID := session.RemoteSessionID
+	oldPrefix := "/wd/hub/session/" + hubID
+	newPrefix := "/session/" + remoteID
+
+	return &httputil.ReverseProxy{
+		Director: func(req *http.Request) {
+			session.UpdateActivity()
+			req.URL.Scheme = "http"
+			req.URL.Host = targetHost
+			req.Host = targetHost
+			if path := req.URL.Path; strings.HasPrefix(path, oldPrefix) {
+				req.URL.Path = newPrefix + path[len(oldPrefix):]
+			}
+		},
+		Transport:     s.proxyTransport,
+		FlushInterval: 100 * time.Millisecond,
 	}
-
-	session.UpdateActivity()
-
-	pathForContainer := strings.Replace(relativePath, hubSessionID, session.RemoteSessionID, 1)
-	targetURL := session.ContainerInfo.BaseURL + pathForContainer
-
-	req, err := http.NewRequest(method, targetURL, body)
-	if err != nil {
-		return nil, err
-	}
-	req.ContentLength = contentLength
-	copyHeaders(req.Header, headers)
-
-	resp, err := s.proxyClient.Do(req)
-	if err != nil {
-		return nil, &HTTPError{StatusCode: http.StatusBadGateway, Message: "Failed to proxy request to container: " + err.Error()}
-	}
-
-	return resp, nil
 }
 
 func (s *SeleniumSessionService) UploadFileToSession(hubSessionID string, fileBytes []byte) (string, error) {
@@ -339,24 +330,6 @@ func findSelenoidOptions(requestBody map[string]interface{}) map[string]interfac
 func getBoolOption(options map[string]interface{}, key string) bool {
 	val, ok := options[key].(bool)
 	return ok && val
-}
-
-func isRestrictedHeader(name string) bool {
-	switch strings.ToLower(name) {
-	case "content-length", "transfer-encoding", "host", "connection", "upgrade":
-		return true
-	}
-	return false
-}
-
-func copyHeaders(dst, src http.Header) {
-	for key, values := range src {
-		switch strings.ToLower(key) {
-		case "content-length", "transfer-encoding", "host", "connection", "upgrade":
-			continue
-		}
-		dst[key] = values
-	}
 }
 
 type HTTPError struct {

@@ -2,6 +2,7 @@ package services
 
 import (
 	"net/http"
+	"net/http/httputil"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -9,6 +10,11 @@ import (
 	"github.com/balakshievas/jelenoid-server-go/internal/dto"
 	"github.com/gorilla/websocket"
 )
+
+type sessionEntry struct {
+	session *dto.SeleniumSession
+	proxy   *httputil.ReverseProxy
+}
 
 type ActiveSessionsService struct {
 	seleniumSessionLimit   int
@@ -96,8 +102,8 @@ func (s *ActiveSessionsService) ReleaseSlot() {
 	s.seleniumInProgress.Add(-1)
 }
 
-func (s *ActiveSessionsService) SessionSuccessfullyCreated(hubSessionID string, session *dto.SeleniumSession) {
-	s.seleniumSessions.Store(hubSessionID, session)
+func (s *ActiveSessionsService) SessionSuccessfullyCreated(hubSessionID string, session *dto.SeleniumSession, proxy *httputil.ReverseProxy) {
+	s.seleniumSessions.Store(hubSessionID, &sessionEntry{session: session, proxy: proxy})
 }
 
 func (s *ActiveSessionsService) SessionDeleted(hubSessionID string) *dto.SeleniumSession {
@@ -105,9 +111,9 @@ func (s *ActiveSessionsService) SessionDeleted(hubSessionID string) *dto.Seleniu
 	if !ok {
 		return nil
 	}
-	session := val.(*dto.SeleniumSession)
+	entry := val.(*sessionEntry)
 	s.ReleaseSlot()
-	return session
+	return entry.session
 }
 
 func (s *ActiveSessionsService) Get(sessionID string) *dto.SeleniumSession {
@@ -115,7 +121,15 @@ func (s *ActiveSessionsService) Get(sessionID string) *dto.SeleniumSession {
 	if !ok {
 		return nil
 	}
-	return val.(*dto.SeleniumSession)
+	return val.(*sessionEntry).session
+}
+
+func (s *ActiveSessionsService) GetProxy(sessionID string) *httputil.ReverseProxy {
+	val, ok := s.seleniumSessions.Load(sessionID)
+	if !ok {
+		return nil
+	}
+	return val.(*sessionEntry).proxy
 }
 
 func (s *ActiveSessionsService) OfferToQueue(req *dto.PendingRequest) bool {
@@ -148,7 +162,7 @@ func (s *ActiveSessionsService) GetInProgressCount() int {
 func (s *ActiveSessionsService) GetSeleniumActiveSessions() map[string]*dto.SeleniumSession {
 	result := make(map[string]*dto.SeleniumSession)
 	s.seleniumSessions.Range(func(key, value any) bool {
-		result[key.(string)] = value.(*dto.SeleniumSession)
+		result[key.(string)] = value.(*sessionEntry).session
 		return true
 	})
 	return result
@@ -184,7 +198,8 @@ func (s *ActiveSessionsService) CheckInactiveSessions() {
 
 	var timedOut []timedOutSession
 	s.seleniumSessions.Range(func(key, value any) bool {
-		session := value.(*dto.SeleniumSession)
+		entry := value.(*sessionEntry)
+		session := entry.session
 		if now-session.GetLastActivity() > s.sessionTimeoutMs {
 			s.seleniumSessions.Delete(key)
 			timedOut = append(timedOut, timedOutSession{
@@ -226,8 +241,8 @@ func (s *ActiveSessionsService) CheckInactiveSessions() {
 
 func (s *ActiveSessionsService) Cleanup() {
 	s.seleniumSessions.Range(func(key, value any) bool {
-		session := value.(*dto.SeleniumSession)
-		go s.dockerService.StopContainer(session.ContainerInfo.ContainerID)
+		entry := value.(*sessionEntry)
+		go s.dockerService.StopContainer(entry.session.ContainerInfo.ContainerID)
 		s.seleniumSessions.Delete(key)
 		return true
 	})

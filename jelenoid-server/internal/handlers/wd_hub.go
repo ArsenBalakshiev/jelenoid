@@ -3,26 +3,22 @@ package handlers
 import (
 	"encoding/base64"
 	"encoding/json"
-	"io"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/balakshievas/jelenoid-server-go/internal/services"
 )
 
-var copyBufPool = sync.Pool{
-	New: func() interface{} {
-		return make([]byte, 32*1024)
-	},
-}
-
 type WdHubHandler struct {
 	seleniumService *services.SeleniumSessionService
+	activeSessions  *services.ActiveSessionsService
 }
 
-func NewWdHubHandler(seleniumService *services.SeleniumSessionService) *WdHubHandler {
-	return &WdHubHandler{seleniumService: seleniumService}
+func NewWdHubHandler(seleniumService *services.SeleniumSessionService, activeSessions *services.ActiveSessionsService) *WdHubHandler {
+	return &WdHubHandler{
+		seleniumService: seleniumService,
+		activeSessions:  activeSessions,
+	}
 }
 
 func (h *WdHubHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +43,7 @@ func (h *WdHubHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *WdHubHandler) DeleteSession(w http.ResponseWriter, r *http.Request) {
-	sessionID := ExtractSessionID(r.URL.Path)
+	sessionID := r.PathValue("id")
 	if sessionID == "" {
 		http.Error(w, "Session ID required", http.StatusBadRequest)
 		return
@@ -57,53 +53,21 @@ func (h *WdHubHandler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *WdHubHandler) ProxyRequest(w http.ResponseWriter, r *http.Request) {
-	sessionID := ExtractSessionID(r.URL.Path)
+	sessionID := r.PathValue("id")
 	if sessionID == "" {
 		http.Error(w, "Session ID required", http.StatusBadRequest)
 		return
 	}
-
-	idx := strings.Index(r.URL.Path, "/wd/hub")
-	if idx < 0 {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
+	proxy := h.activeSessions.GetProxy(sessionID)
+	if proxy == nil {
+		http.Error(w, "Session not found: "+sessionID, http.StatusNotFound)
 		return
 	}
-	relativePath := r.URL.Path[idx+len("/wd/hub"):]
-
-	var body io.Reader
-	var contentLength int64
-	if r.Method != "GET" && r.Body != nil {
-		body = r.Body
-		contentLength = r.ContentLength
-	}
-
-	resp, err := h.seleniumService.ProxyRequest(sessionID, r.Method, relativePath, r.Header, body, contentLength)
-	if err != nil {
-		if httpErr, ok := err.(*services.HTTPError); ok {
-			WriteErrorJSON(w, httpErr.StatusCode, httpErr.Message)
-		} else {
-			WriteErrorJSON(w, http.StatusBadGateway, err.Error())
-		}
-		return
-	}
-	defer resp.Body.Close()
-
-	dst := w.Header()
-	for key, values := range resp.Header {
-		switch key {
-		case "Content-Length", "Transfer-Encoding", "Host", "Connection", "Upgrade":
-			continue
-		}
-		dst[key] = values
-	}
-	w.WriteHeader(resp.StatusCode)
-	buf := copyBufPool.Get().([]byte)
-	io.CopyBuffer(w, resp.Body, buf)
-	copyBufPool.Put(buf)
+	proxy.ServeHTTP(w, r)
 }
 
 func (h *WdHubHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
-	sessionID := ExtractSessionID(r.URL.Path)
+	sessionID := r.PathValue("id")
 	if sessionID == "" {
 		http.Error(w, "Session ID required", http.StatusBadRequest)
 		return
@@ -165,4 +129,3 @@ func WriteErrorJSON(w http.ResponseWriter, statusCode int, message string) {
 		},
 	})
 }
-

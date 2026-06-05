@@ -64,7 +64,7 @@ func main() {
 		cfg.SessionTimeoutMs,
 	)
 
-	wdHubHandler := handlers.NewWdHubHandler(seleniumService)
+	wdHubHandler := handlers.NewWdHubHandler(seleniumService, activeSessions)
 	activeSessionsHandler := handlers.NewActiveSessionsHandler(activeSessions)
 	browserManagerHandler := handlers.NewBrowserManagerHandler(browserManager)
 	eventsHandler := handlers.NewEventsHandler(sseHub)
@@ -74,37 +74,12 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/wd/hub/session", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost:
-			wdHubHandler.CreateSession(w, r)
-		case http.MethodDelete:
-			wdHubHandler.DeleteSession(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-
-	mux.HandleFunc("/wd/hub/session/", func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		pathAfterSession := strings.TrimPrefix(path, "/wd/hub/session/")
-
-		if strings.HasSuffix(path, "/se/file") || strings.HasSuffix(path, "/file") {
-			if r.Method == http.MethodPost {
-				wdHubHandler.UploadFile(w, r)
-				return
-			}
-		}
-
-		if r.Method == http.MethodDelete {
-			parts := strings.Split(pathAfterSession, "/")
-			if len(parts) == 1 && parts[0] != "" {
-				wdHubHandler.DeleteSession(w, r)
-				return
-			}
-		}
-		wdHubHandler.ProxyRequest(w, r)
-	})
+	mux.HandleFunc("POST /wd/hub/session", wdHubHandler.CreateSession)
+	mux.HandleFunc("DELETE /wd/hub/session", wdHubHandler.DeleteSession)
+	mux.HandleFunc("DELETE /wd/hub/session/{id}", wdHubHandler.DeleteSession)
+	mux.HandleFunc("POST /wd/hub/session/{id}/se/file", wdHubHandler.UploadFile)
+	mux.HandleFunc("POST /wd/hub/session/{id}/file", wdHubHandler.UploadFile)
+	mux.HandleFunc("/wd/hub/session/{id}/", wdHubHandler.ProxyRequest)
 
 	mux.HandleFunc("/api/limit/sessions", activeSessionsHandler.GetAllSessions)
 	mux.HandleFunc("/api/limit/request", activeSessionsHandler.GetAllPendingRequests)
