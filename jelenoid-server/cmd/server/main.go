@@ -169,6 +169,7 @@ func main() {
 	log.Println("Shutting down server...")
 	activeSessions.Cleanup()
 	playwrightService.Shutdown()
+	browserManager.Shutdown()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

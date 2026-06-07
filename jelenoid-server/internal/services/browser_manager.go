@@ -6,30 +6,58 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/balakshievas/jelenoid-server-go/internal/dto"
 )
 
-type BrowserManagerService struct {
-	mu               sync.Mutex
-	browserList      map[string]*dto.BrowserInfo
-	defaultBrowsers map[string]*dto.BrowserInfo
-	configDir        string
+type browserSnapshot struct {
+	all       []*dto.BrowserInfo
+	byKey     map[string]*dto.BrowserInfo
+	byDefault map[string]*dto.BrowserInfo
 }
 
+type BrowserManagerService struct {
+	configDir string
+	snap      atomic.Pointer[browserSnapshot]
+
+	mu        sync.Mutex
+	dirty     bool
+	persistCh chan struct{}
+	quit      chan struct{}
+}
+
+const browserPersistDebounce = 500 * time.Millisecond
+
 func NewBrowserManagerService(configDir string) *BrowserManagerService {
-	svc := &BrowserManagerService{
-		browserList:      make(map[string]*dto.BrowserInfo),
-		defaultBrowsers: make(map[string]*dto.BrowserInfo),
-		configDir:        configDir,
+	s := &BrowserManagerService{
+		configDir: configDir,
+		persistCh: make(chan struct{}, 1),
+		quit:      make(chan struct{}),
 	}
-	svc.initBrowsersFromFile()
-	return svc
+	s.snap.Store(&browserSnapshot{
+		all:       []*dto.BrowserInfo{},
+		byKey:     map[string]*dto.BrowserInfo{},
+		byDefault: map[string]*dto.BrowserInfo{},
+	})
+	s.initBrowsersFromFile()
+	go s.persistLoop()
+	return s
+}
+
+func (s *BrowserManagerService) Shutdown() {
+	select {
+	case <-s.quit:
+		return
+	default:
+		close(s.quit)
+	}
+	s.persistNow()
 }
 
 func (s *BrowserManagerService) initBrowsersFromFile() {
 	filePath := s.configDir
-
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		dir := filepath.Dir(filePath)
 		if err := os.MkdirAll(dir, 0755); err != nil {
@@ -48,89 +76,138 @@ func (s *BrowserManagerService) initBrowsersFromFile() {
 		fmt.Printf("Error reading browsers file: %v\n", err)
 		return
 	}
+
+	all := make([]*dto.BrowserInfo, 0, len(browsers))
+	byKey := make(map[string]*dto.BrowserInfo, len(browsers))
+	byDefault := make(map[string]*dto.BrowserInfo)
 	for _, b := range browsers {
-		s.addBrowserClearly(b)
+		all = append(all, b)
+		byKey[browserKey(b.Name, b.Version)] = b
+		if b.IsDefault {
+			byDefault[b.Name] = b
+		}
 	}
+	s.snap.Store(&browserSnapshot{all: all, byKey: byKey, byDefault: byDefault})
 }
 
 func browserKey(name, version string) string {
 	return name + ":" + version
 }
 
-func (s *BrowserManagerService) setDefaultBrowser(info *dto.BrowserInfo) {
-	s.defaultBrowsers[info.Name] = info
-}
-
-func (s *BrowserManagerService) addBrowserClearly(info *dto.BrowserInfo) *dto.BrowserInfo {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if info.IsDefault {
-		s.setDefaultBrowser(info)
-	}
-	key := browserKey(info.Name, info.Version)
-	existing, ok := s.browserList[key]
-	if ok {
-		return existing
-	}
-	s.browserList[key] = info
-	return info
-}
-
 func (s *BrowserManagerService) AddBrowser(info *dto.BrowserInfo) *dto.BrowserInfo {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if info.IsDefault {
-		s.setDefaultBrowser(info)
-	}
+
+	current := s.snap.Load()
 	key := browserKey(info.Name, info.Version)
-	s.browserList[key] = info
-	s.writeBrowsersToFile()
+	if existing, ok := current.byKey[key]; ok {
+		return existing
+	}
+
+	newByKey := make(map[string]*dto.BrowserInfo, len(current.byKey)+1)
+	for k, v := range current.byKey {
+		newByKey[k] = v
+	}
+	newByKey[key] = info
+
+	newByDefault := make(map[string]*dto.BrowserInfo, len(current.byDefault)+1)
+	for k, v := range current.byDefault {
+		if k != info.Name {
+			newByDefault[k] = v
+		}
+	}
+	if info.IsDefault {
+		newByDefault[info.Name] = info
+	}
+
+	newAll := make([]*dto.BrowserInfo, 0, len(current.all)+1)
+	newAll = append(newAll, current.all...)
+	newAll = append(newAll, info)
+
+	s.snap.Store(&browserSnapshot{all: newAll, byKey: newByKey, byDefault: newByDefault})
+	s.markDirty()
 	return info
 }
 
 func (s *BrowserManagerService) DeleteBrowser(browserName, browserVersion string) *dto.BrowserInfo {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	current := s.snap.Load()
 	key := browserKey(browserName, browserVersion)
-	delete(s.defaultBrowsers, key)
-	result := s.browserList[key]
-	delete(s.browserList, key)
-	s.writeBrowsersToFile()
-	return result
+	existing, ok := current.byKey[key]
+	if !ok {
+		return nil
+	}
+
+	newByKey := make(map[string]*dto.BrowserInfo, len(current.byKey)-1)
+	for k, v := range current.byKey {
+		if k != key {
+			newByKey[k] = v
+		}
+	}
+
+	newByDefault := make(map[string]*dto.BrowserInfo, len(current.byDefault))
+	for k, v := range current.byDefault {
+		if k != browserName {
+			newByDefault[k] = v
+		}
+	}
+
+	newAll := make([]*dto.BrowserInfo, 0, len(current.all)-1)
+	for _, b := range current.all {
+		if b != existing {
+			newAll = append(newAll, b)
+		}
+	}
+
+	s.snap.Store(&browserSnapshot{all: newAll, byKey: newByKey, byDefault: newByDefault})
+	s.markDirty()
+	return existing
+}
+
+func (s *BrowserManagerService) markDirty() {
+	s.dirty = true
+	select {
+	case s.persistCh <- struct{}{}:
+	default:
+	}
 }
 
 func (s *BrowserManagerService) GetAllBrowsers() []*dto.BrowserInfo {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	result := make([]*dto.BrowserInfo, 0, len(s.browserList))
-	for _, b := range s.browserList {
-		result = append(result, b)
+	snap := s.snap.Load()
+	if snap == nil {
+		return nil
 	}
-	return result
+	return snap.all
 }
 
 func (s *BrowserManagerService) GetImageByBrowserNameAndVersion(browserName, version string) string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	snap := s.snap.Load()
+	if snap == nil {
+		return ""
+	}
 	if version == "" {
-		if b, ok := s.defaultBrowsers[browserName]; ok {
+		if b, ok := snap.byDefault[browserName]; ok {
 			return b.DockerImageName
 		}
 		return ""
 	}
-	if b, ok := s.browserList[browserKey(browserName, version)]; ok {
+	if b, ok := snap.byKey[browserKey(browserName, version)]; ok {
 		return b.DockerImageName
 	}
 	return ""
 }
 
 func (s *BrowserManagerService) GetBrowserInfoByBrowserNameAndVersion(browserName, version string) *dto.BrowserInfo {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if version == "" {
-		return s.defaultBrowsers[browserName]
+	snap := s.snap.Load()
+	if snap == nil {
+		return nil
 	}
-	return s.browserList[browserKey(browserName, version)]
+	if version == "" {
+		return snap.byDefault[browserName]
+	}
+	return snap.byKey[browserKey(browserName, version)]
 }
 
 func (s *BrowserManagerService) readBrowsersFromFile() ([]*dto.BrowserInfo, error) {
@@ -138,12 +215,10 @@ func (s *BrowserManagerService) readBrowsersFromFile() ([]*dto.BrowserInfo, erro
 	if err != nil {
 		return nil, err
 	}
-
 	var config dto.BrowsersConfig
 	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, err
 	}
-
 	var result []*dto.BrowserInfo
 	for name, entry := range config {
 		for version, vi := range entry.Versions {
@@ -159,9 +234,54 @@ func (s *BrowserManagerService) readBrowsersFromFile() ([]*dto.BrowserInfo, erro
 	return result, nil
 }
 
-func (s *BrowserManagerService) writeBrowsersToFile() {
+func (s *BrowserManagerService) persistLoop() {
+	for {
+		select {
+		case <-s.persistCh:
+		case <-s.quit:
+			return
+		}
+		for drained := false; !drained; {
+			select {
+			case <-s.persistCh:
+			default:
+				drained = true
+			}
+		}
+		select {
+		case <-time.After(browserPersistDebounce):
+			s.persistNow()
+		case <-s.quit:
+			return
+		}
+	}
+}
+
+func (s *BrowserManagerService) persistNow() {
+	s.mu.Lock()
+	if !s.dirty {
+		s.mu.Unlock()
+		return
+	}
+	s.dirty = false
+	snap := s.snap.Load()
+	s.mu.Unlock()
+
+	data := s.snapshotToJSON(snap)
+	if data == nil {
+		return
+	}
+	if err := s.atomicWrite(s.configDir, data); err != nil {
+		fmt.Printf("Error writing browsers file: %v\n", err)
+		s.mu.Lock()
+		s.dirty = true
+		s.mu.Unlock()
+	}
+}
+
+func (s *BrowserManagerService) snapshotToJSON(snap *browserSnapshot) []byte {
 	data := make(map[string]interface{})
-	for _, b := range s.browserList {
+	for _, b := range snap.all {
 		entry, ok := data[b.Name].(map[string]interface{})
 		if !ok {
 			entry = map[string]interface{}{
@@ -176,7 +296,6 @@ func (s *BrowserManagerService) writeBrowsersToFile() {
 			entry["default"] = b.Version
 		}
 	}
-
 	for _, entry := range data {
 		e := entry.(map[string]interface{})
 		if e["default"] == nil {
@@ -187,13 +306,18 @@ func (s *BrowserManagerService) writeBrowsersToFile() {
 			}
 		}
 	}
-
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		fmt.Printf("Error marshalling browsers: %v\n", err)
-		return
+		return nil
 	}
-	if err := os.WriteFile(s.configDir, jsonData, 0644); err != nil {
-		fmt.Printf("Error writing browsers file: %v\n", err)
+	return jsonData
+}
+
+func (s *BrowserManagerService) atomicWrite(path string, data []byte) error {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return err
 	}
+	return os.Rename(tmp, path)
 }
