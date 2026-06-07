@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/balakshievas/jelenoid-server-go/internal/services"
@@ -22,12 +21,11 @@ var devtoolsUpgrader = websocket.Upgrader{
 }
 
 func (h *DevToolsProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	parts := SplitPath(r.URL.Path)
-	if len(parts) < 4 || parts[0] != "session" {
+	sessionID := ExtractSessionID(r.URL.Path)
+	if sessionID == "" {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
-	sessionID := parts[1]
 
 	session := h.activeSessions.Get(sessionID)
 	if session == nil {
@@ -41,23 +39,18 @@ func (h *DevToolsProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	}
 
 	targetURL := fmt.Sprintf("ws://%s:7070/devtools/page/%s", session.ContainerInfo.ContainerName, session.RemoteSessionID)
-	log.Printf("CDP Proxy: Attempting to upgrade request for session %s to WebSocket, proxying to %s", sessionID, targetURL)
 
 	clientConn, err := devtoolsUpgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("CDP Proxy: Failed to upgrade: %v", err)
 		return
 	}
 	defer clientConn.Close()
 
 	containerConn, _, err := websocket.DefaultDialer.Dial(targetURL, nil)
 	if err != nil {
-		log.Printf("CDP Proxy: Failed to connect to target: %v", err)
 		return
 	}
 	defer containerConn.Close()
-
-	log.Printf("CDP Proxy: Successfully connected to target WebSocket: %s", targetURL)
 
 	done := make(chan struct{})
 

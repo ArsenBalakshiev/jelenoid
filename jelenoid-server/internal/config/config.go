@@ -9,7 +9,6 @@ import (
 type Config struct {
 	ServerPort           int
 	PublicHost           string
-	AuthToken            string
 	ContainerManagerAddr string
 	SessionLimit         int
 	QueueLimit           int
@@ -20,14 +19,13 @@ type Config struct {
 	UIHosts             []string
 	PlaywrightMaxSessions int
 	PlaywrightQueueLimit  int
-	NATSServer           string
+	EnableQueue          bool
 }
 
 func Load() *Config {
 	return &Config{
 		ServerPort:           getEnvInt("JELENOID_PORT", 4444),
 		PublicHost:           getEnvStr("JELENOID_PUBLIC_HOST", "0.0.0.0"),
-		AuthToken:            getEnvStr("JELENOID_AUTH_TOKEN", ""),
 		ContainerManagerAddr: getEnvStr("CONTAINER_MANAGER_ADDRESS", "http://container-manager:8080"),
 		SessionLimit:         getEnvInt("PARALLEL_SESSIONS", 10),
 		QueueLimit:           getEnvInt("QUEUE_LIMIT", 100),
@@ -38,7 +36,7 @@ func Load() *Config {
 		UIHosts:             getEnvSlice("UI_HOSTS_LIST", []string{"http://localhost:3000", "http://localhost:4444"}),
 		PlaywrightMaxSessions: getEnvInt("PLAYWRIGHT_SESSION_LIMIT", 10),
 		PlaywrightQueueLimit:  getEnvInt("PLAYWRIGHT_QUEUE_LIMIT", 100),
-		NATSServer:           getEnvStr("NATS_SERVER", ""),
+		EnableQueue:          getEnvBool("ENABLE_QUEUE", true),
 	}
 }
 
@@ -70,6 +68,15 @@ func getEnvInt64(key string, fallback int64) int64 {
 func getEnvSlice(key string, fallback []string) []string {
 	if v := os.Getenv(key); v != "" {
 		return strings.Split(v, ",")
+	}
+	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	if v := os.Getenv(key); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
 	}
 	return fallback
 }

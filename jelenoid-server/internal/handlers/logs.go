@@ -16,14 +16,14 @@ func NewLogsHandler(seleniumService *services.SeleniumSessionService) *LogsHandl
 }
 
 func (h *LogsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	parts := SplitPath(r.URL.Path)
-	if len(parts) < 2 || parts[0] != "logs" {
+	const prefix = "/logs/"
+	if len(r.URL.Path) <= len(prefix) {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
-	sessionID := parts[1]
+	sessionID := r.URL.Path[len(prefix):]
 
-	ch, err := h.seleniumService.StreamLogsForSession(sessionID)
+	ch, err := h.seleniumService.StreamLogsForSession(r.Context(), sessionID)
 	if err != nil {
 		if httpErr, ok := err.(*services.HTTPError); ok {
 			http.Error(w, httpErr.Message, httpErr.StatusCode)

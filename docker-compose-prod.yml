@@ -9,6 +9,7 @@ services:
     volumes:
       - "./browsers.json:/app/browsers.json:ro"
     environment:
+      - JELENOID_PORT=4444
       - PARALLEL_SESSIONS=10
       - QUEUE_LIMIT=100
       - BROWSERS_FILE=/app/browsers.json
@@ -37,20 +38,6 @@ services:
     networks:
       - jelenoid-net
 
-  metrics-service:
-    image: suomessa/jelenoid:metrics-latest
-    container_name: metrics-service
-    networks:
-      - jelenoid-net
-    depends_on:
-      - nats
-      - jelenoid-server
-    environment:
-      NATS_URL: nats://nats:4222
-      POSTGRES_URL: jdbc:postgresql://metrics-db:5432/metrics
-      POSTGRES_USER: metrics-user
-      POSTGRES_PASSWORD: metrics-password
-
   jelenoid-ui:
     image: suomessa/jelenoid:ui-latest
     container_name: jelenoid-ui
@@ -63,32 +50,6 @@ services:
       - jelenoid-net
     depends_on:
      - jelenoid-server
-
-  nats:
-    image: nats:2.10
-    container_name: nats
-    networks:
-      - jelenoid-net
-    ports:
-      - "4222:4222"
-      - "8222:8222"
-    command: |
-      -js
-      -m 8222
-      -sd /data/jetstream
-    volumes:
-      - nats_data:/data/jetstream
-
-  metrics-db:
-    image: postgres:16
-    container_name: metrics-db
-    networks:
-      - jelenoid-net
-    environment:
-      POSTGRES_DB: metrics
-      POSTGRES_USER: metrics-user
-      POSTGRES_PASSWORD: metrics-password
-    ports: [ "5432:5432" ]
 
 networks:
   jelenoid-net:

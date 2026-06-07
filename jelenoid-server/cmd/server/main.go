@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"log"
 	"net/http"
@@ -15,7 +14,6 @@ import (
 	"github.com/balakshievas/jelenoid-server-go/internal/config"
 	"github.com/balakshievas/jelenoid-server-go/internal/handlers"
 	"github.com/balakshievas/jelenoid-server-go/internal/services"
-	"github.com/nats-io/nats.go"
 )
 
 func main() {
@@ -24,40 +22,6 @@ func main() {
 	statusChan := make(chan struct{}, 256)
 	sseHub := services.NewSSEHub()
 
-	var natsConn *nats.Conn
-	if cfg.NATSServer != "" {
-		var err error
-		natsConn, err = nats.Connect(cfg.NATSServer, nats.Timeout(2*time.Second))
-		if err != nil {
-			log.Printf("Failed to connect to NATS (%s): %v", cfg.NATSServer, err)
-		} else {
-			log.Println("Connected to NATS")
-			js, err := natsConn.JetStream()
-			if err == nil {
-				streamInfo, err := js.StreamInfo("SESSIONS")
-				if err != nil || streamInfo == nil {
-					_, err = js.AddStream(&nats.StreamConfig{
-						Name:     "SESSIONS",
-						Subjects: []string{"sessions.*"},
-						Storage:  nats.FileStorage,
-						Replicas: 1,
-					})
-					if err != nil {
-						log.Printf("JetStream not available: %v", err)
-					} else {
-						log.Println("Created JetStream stream 'SESSIONS'")
-					}
-				}
-			}
-		}
-	}
-	defer func() {
-		if natsConn != nil {
-			natsConn.Close()
-		}
-	}()
-
-	sessionPublisher := services.NewSessionPublisher(natsConn)
 	dockerService := services.NewDockerExternalService(cfg.ContainerManagerAddr)
 	browserManager := services.NewBrowserManagerService(cfg.BrowsersConfigDir)
 	activeSessions := services.NewActiveSessionsService(
@@ -68,18 +32,16 @@ func main() {
 		cfg.PlaywrightMaxSessions,
 		cfg.PlaywrightQueueLimit,
 		dockerService,
-		sessionPublisher,
 		statusChan,
+		cfg.EnableQueue,
 	)
 	seleniumService := services.NewSeleniumSessionService(
 		activeSessions,
 		browserManager,
 		dockerService,
-		sessionPublisher,
 		statusChan,
 		cfg.PublicHost,
 		cfg.ServerPort,
-		cfg.AuthToken,
 		cfg.PublicHost,
 	)
 	activeSessions.SetSeleniumService(seleniumService)
@@ -98,13 +60,11 @@ func main() {
 		activeSessions,
 		dockerService,
 		browserManager,
-		sessionPublisher,
 		statusChan,
 		cfg.SessionTimeoutMs,
-		cfg.AuthToken,
 	)
 
-	wdHubHandler := handlers.NewWdHubHandler(seleniumService)
+	wdHubHandler := handlers.NewWdHubHandler(seleniumService, activeSessions)
 	activeSessionsHandler := handlers.NewActiveSessionsHandler(activeSessions)
 	browserManagerHandler := handlers.NewBrowserManagerHandler(browserManager)
 	eventsHandler := handlers.NewEventsHandler(sseHub)
@@ -114,37 +74,12 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/wd/hub/session", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost:
-			wdHubHandler.CreateSession(w, r)
-		case http.MethodDelete:
-			wdHubHandler.DeleteSession(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-
-	mux.HandleFunc("/wd/hub/session/", func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		pathAfterSession := strings.TrimPrefix(path, "/wd/hub/session/")
-
-		if strings.HasSuffix(path, "/se/file") || strings.HasSuffix(path, "/file") {
-			if r.Method == http.MethodPost {
-				wdHubHandler.UploadFile(w, r)
-				return
-			}
-		}
-
-		if r.Method == http.MethodDelete {
-			parts := strings.Split(pathAfterSession, "/")
-			if len(parts) == 1 && parts[0] != "" {
-				wdHubHandler.DeleteSession(w, r)
-				return
-			}
-		}
-		wdHubHandler.ProxyRequest(w, r)
-	})
+	mux.HandleFunc("POST /wd/hub/session", wdHubHandler.CreateSession)
+	mux.HandleFunc("DELETE /wd/hub/session", wdHubHandler.DeleteSession)
+	mux.HandleFunc("DELETE /wd/hub/session/{id}", wdHubHandler.DeleteSession)
+	mux.HandleFunc("POST /wd/hub/session/{id}/se/file", wdHubHandler.UploadFile)
+	mux.HandleFunc("POST /wd/hub/session/{id}/file", wdHubHandler.UploadFile)
+	mux.HandleFunc("/wd/hub/session/{id}/", wdHubHandler.ProxyRequest)
 
 	mux.HandleFunc("/api/limit/sessions", activeSessionsHandler.GetAllSessions)
 	mux.HandleFunc("/api/limit/request", activeSessionsHandler.GetAllPendingRequests)
@@ -186,17 +121,10 @@ func main() {
 		http.NotFound(w, r)
 	})
 
-	mux.HandleFunc("/playwright", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("MUX: /playwright matched, path=%s", r.URL.Path)
-		playwrightService.ServeHTTP(w, r)
-	})
-	mux.HandleFunc("/playwright/", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("MUX: /playwright/ matched, path=%s", r.URL.Path)
-		playwrightService.ServeHTTP(w, r)
-	})
+	mux.HandleFunc("/playwright", playwrightService.ServeHTTP)
+	mux.HandleFunc("/playwright/", playwrightService.ServeHTTP)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/playwright-") {
-			log.Printf("MUX: catch-all /playwright- matched, path=%s", r.URL.Path)
 			playwrightService.ServeHTTP(w, r)
 			return
 		}
@@ -204,11 +132,19 @@ func main() {
 	})
 
 	handler := handlers.CORSMiddleware(cfg.UIHosts, mux)
-	handler = handlers.LoggingMiddleware(handler)
 
 	go func() {
-		for range statusChan {
-			statusNotifier.OnStatusChanged()
+		var timerCh <-chan time.Time
+		for {
+			select {
+			case <-statusChan:
+				if timerCh == nil {
+					timerCh = time.After(100 * time.Millisecond)
+				}
+			case <-timerCh:
+				statusNotifier.OnStatusChanged()
+				timerCh = nil
+			}
 		}
 	}()
 
@@ -242,6 +178,7 @@ func main() {
 	log.Println("Shutting down server...")
 	activeSessions.Cleanup()
 	playwrightService.Shutdown()
+	browserManager.Shutdown()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -250,8 +187,4 @@ func main() {
 	}
 
 	log.Println("Server exited")
-}
-
-func init() {
-	_ = base64.StdEncoding
 }

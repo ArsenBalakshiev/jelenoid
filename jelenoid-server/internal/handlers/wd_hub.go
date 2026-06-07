@@ -3,8 +3,6 @@ package handlers
 import (
 	"encoding/base64"
 	"encoding/json"
-	"io"
-	"log"
 	"net/http"
 	"strings"
 
@@ -13,10 +11,14 @@ import (
 
 type WdHubHandler struct {
 	seleniumService *services.SeleniumSessionService
+	activeSessions  *services.ActiveSessionsService
 }
 
-func NewWdHubHandler(seleniumService *services.SeleniumSessionService) *WdHubHandler {
-	return &WdHubHandler{seleniumService: seleniumService}
+func NewWdHubHandler(seleniumService *services.SeleniumSessionService, activeSessions *services.ActiveSessionsService) *WdHubHandler {
+	return &WdHubHandler{
+		seleniumService: seleniumService,
+		activeSessions:  activeSessions,
+	}
 }
 
 func (h *WdHubHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +43,7 @@ func (h *WdHubHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *WdHubHandler) DeleteSession(w http.ResponseWriter, r *http.Request) {
-	sessionID := ExtractSessionID(r.URL.Path)
+	sessionID := r.PathValue("id")
 	if sessionID == "" {
 		http.Error(w, "Session ID required", http.StatusBadRequest)
 		return
@@ -51,54 +53,21 @@ func (h *WdHubHandler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *WdHubHandler) ProxyRequest(w http.ResponseWriter, r *http.Request) {
-	sessionID := ExtractSessionID(r.URL.Path)
+	sessionID := r.PathValue("id")
 	if sessionID == "" {
 		http.Error(w, "Session ID required", http.StatusBadRequest)
 		return
 	}
-
-	idx := strings.Index(r.URL.Path, "/wd/hub")
-	if idx < 0 {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
+	proxy := h.activeSessions.GetProxy(sessionID)
+	if proxy == nil {
+		http.Error(w, "Session not found: "+sessionID, http.StatusNotFound)
 		return
 	}
-	relativePath := r.URL.Path[idx+len("/wd/hub"):]
-
-	var bodyBytes []byte
-	if r.Method != "GET" && r.Body != nil {
-		var err error
-		bodyBytes, err = io.ReadAll(r.Body)
-		if err != nil {
-			WriteErrorJSON(w, http.StatusBadRequest, "Failed to read request body")
-			return
-		}
-		r.Body.Close()
-	}
-
-	resp, err := h.seleniumService.ProxyRequest(sessionID, r.Method, relativePath, r.Header, bodyBytes)
-	if err != nil {
-		if httpErr, ok := err.(*services.HTTPError); ok {
-			WriteErrorJSON(w, httpErr.StatusCode, httpErr.Message)
-		} else {
-			WriteErrorJSON(w, http.StatusBadGateway, err.Error())
-		}
-		return
-	}
-	defer resp.Body.Close()
-
-	for key, values := range resp.Header {
-		if !IsRestrictedHeader(key) {
-			for _, v := range values {
-				w.Header().Add(key, v)
-			}
-		}
-	}
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	proxy.ServeHTTP(w, r)
 }
 
 func (h *WdHubHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
-	sessionID := ExtractSessionID(r.URL.Path)
+	sessionID := r.PathValue("id")
 	if sessionID == "" {
 		http.Error(w, "Session ID required", http.StatusBadRequest)
 		return
@@ -137,24 +106,16 @@ func (h *WdHubHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func ExtractSessionID(path string) string {
-	parts := SplitPath(path)
-	idx := -1
-	for i, p := range parts {
-		if p == "session" && i+1 < len(parts) {
-			idx = i + 1
-			break
-		}
+	const marker = "/session/"
+	idx := strings.Index(path, marker)
+	if idx < 0 {
+		return ""
 	}
-	if idx >= 0 && idx < len(parts) {
-		return parts[idx]
+	rest := path[idx+len(marker):]
+	if i := strings.IndexByte(rest, '/'); i >= 0 {
+		return rest[:i]
 	}
-	return ""
-}
-
-func IsRestrictedHeader(name string) bool {
-	lower := strings.ToLower(name)
-	return lower == "content-length" || lower == "transfer-encoding" ||
-		lower == "host" || lower == "connection" || lower == "upgrade"
+	return rest
 }
 
 func WriteErrorJSON(w http.ResponseWriter, statusCode int, message string) {
@@ -166,12 +127,5 @@ func WriteErrorJSON(w http.ResponseWriter, statusCode int, message string) {
 			"message":    message,
 			"stacktrace": "",
 		},
-	})
-}
-
-func LogMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("%s %s", r.Method, r.URL.Path)
-		next.ServeHTTP(w, r)
 	})
 }

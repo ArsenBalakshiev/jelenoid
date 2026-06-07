@@ -1,9 +1,7 @@
 package handlers
 
 import (
-	"log"
 	"net/http"
-	"strings"
 )
 
 func CORSMiddleware(allowedOrigins []string, next http.Handler) http.Handler {
@@ -31,21 +29,4 @@ func CORSMiddleware(allowedOrigins []string, next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
-}
-
-func LoggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("%s %s %s", r.RemoteAddr, r.Method, r.URL.Path)
-		next.ServeHTTP(w, r)
-	})
-}
-
-func SplitPath(path string) []string {
-	var parts []string
-	for _, p := range strings.Split(path, "/") {
-		if p != "" {
-			parts = append(parts, p)
-		}
-	}
-	return parts
 }

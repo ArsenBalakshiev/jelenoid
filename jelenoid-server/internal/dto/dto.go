@@ -1,7 +1,7 @@
 package dto
 
 import (
-	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -17,7 +17,7 @@ type ContainerInfo struct {
 	ContainerName string    `json:"containerName"`
 	LastActivity  int64     `json:"lastActivity"`
 	StartTime     time.Time `json:"startTime"`
-	mu            sync.Mutex
+	BaseURL       string    `json:"-"`
 }
 
 func NewContainerInfo(containerID, containerName string) *ContainerInfo {
@@ -25,36 +25,23 @@ func NewContainerInfo(containerID, containerName string) *ContainerInfo {
 		ContainerID:   containerID,
 		ContainerName: containerName,
 		StartTime:     time.Now(),
+		BaseURL:       "http://" + containerName + ":4444",
 	}
 	ci.UpdateActivity()
 	return ci
 }
 
 func (c *ContainerInfo) UpdateActivity() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.LastActivity = time.Now().UnixMilli()
+	atomic.StoreInt64(&c.LastActivity, time.Now().UnixMilli())
 }
 
 func (c *ContainerInfo) GetLastActivity() int64 {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.LastActivity
+	return atomic.LoadInt64(&c.LastActivity)
 }
 
 type ContainerInfoRecord struct {
 	ContainerID   string `json:"containerId"`
 	ContainerName string `json:"containerName"`
-}
-
-type SessionInfo struct {
-	ID        string     `json:"id"`
-	StartTime *time.Time `json:"startTime"`
-	EndTime   *time.Time `json:"endTime"`
-	Platform  string     `json:"platform"`
-	Version   string     `json:"version"`
-	Status    string     `json:"status"`
-	EndedBy   string     `json:"endedBy"`
 }
 
 type SeleniumSession struct {
@@ -64,7 +51,6 @@ type SeleniumSession struct {
 	Version        string         `json:"version"`
 	VNCEnabled     bool           `json:"vncEnabled"`
 	ContainerInfo  *ContainerInfo `json:"containerInfo"`
-	SessionInfo     *SessionInfo  `json:"sessionInfo"`
 }
 
 func (s *SeleniumSession) UpdateActivity() {
@@ -88,10 +74,12 @@ func (s *SeleniumSession) GetStartTime() time.Time {
 }
 
 type PendingRequest struct {
-	RequestBody map[string]interface{}  `json:"requestBody"`
+	RequestBody map[string]interface{}    `json:"requestBody"`
+	Browser     string                    `json:"browser"`
+	Version     string                    `json:"version"`
 	Future      chan PendingRequestResult `json:"-"`
-	QueuedTime  time.Time                `json:"queuedTime"`
-	StartTime   int64                    `json:"startTime"`
+	QueuedTime  time.Time                 `json:"queuedTime"`
+	StartTime   int64                     `json:"startTime"`
 }
 
 type PendingRequestResult struct {

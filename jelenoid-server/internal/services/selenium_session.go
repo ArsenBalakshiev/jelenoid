@@ -2,12 +2,13 @@ package services
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"net"
 	"net/http"
-	"net/url"
+	"net/http/httputil"
 	"strings"
 	"time"
 
@@ -16,72 +17,62 @@ import (
 )
 
 type SeleniumSessionService struct {
-	activeSessions   *ActiveSessionsService
-	browserManager   *BrowserManagerService
-	dockerService    *DockerExternalService
-	sessionPublisher *SessionPublisher
-	statusChan       chan struct{}
+	activeSessions *ActiveSessionsService
+	browserManager *BrowserManagerService
+	dockerService  *DockerExternalService
+	statusChan     chan struct{}
 
-	serverAddress string
-	serverPort    int
-	authToken     string
-	publicHost    string
-	httpClient    *http.Client
-	proxyClient   *http.Client
+	serverAddress  string
+	serverPort     int
+	publicHost     string
+	httpClient     *http.Client
+	proxyTransport http.RoundTripper
 }
 
 func NewSeleniumSessionService(
 	activeSessions *ActiveSessionsService,
 	browserManager *BrowserManagerService,
 	dockerService *DockerExternalService,
-	sessionPublisher *SessionPublisher,
 	statusChan chan struct{},
 	serverAddress string,
 	serverPort int,
-	authToken string,
 	publicHost string,
 ) *SeleniumSessionService {
+	dialer := &net.Dialer{
+		Timeout:   5 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
 	proxyTransport := &http.Transport{
-		MaxIdleConns:        2000,
-		MaxIdleConnsPerHost: 500,
-		MaxConnsPerHost:     500,
-		IdleConnTimeout:     60 * time.Second,
-		DisableKeepAlives:   true,
-		DisableCompression:  true,
+		DialContext:           dialer.DialContext,
+		MaxIdleConns:          200,
+		MaxIdleConnsPerHost:   10,
+		MaxConnsPerHost:       0,
+		IdleConnTimeout:       60 * time.Second,
+		DisableCompression:    true,
+		ResponseHeaderTimeout: 90 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		ForceAttemptHTTP2:     false,
 	}
 	return &SeleniumSessionService{
-		activeSessions:   activeSessions,
-		browserManager:   browserManager,
-		dockerService:    dockerService,
-		sessionPublisher: sessionPublisher,
-		statusChan:       statusChan,
-		serverAddress:    serverAddress,
-		serverPort:       serverPort,
-		authToken:        authToken,
-		publicHost:       publicHost,
+		activeSessions: activeSessions,
+		browserManager: browserManager,
+		dockerService:  dockerService,
+		statusChan:     statusChan,
+		serverAddress:  serverAddress,
+		serverPort:     serverPort,
+		publicHost:     publicHost,
 		httpClient: &http.Client{
 			Timeout:   300 * time.Second,
 			Transport: proxyTransport,
 		},
-		proxyClient: &http.Client{
-			Timeout:   0,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-			Transport: proxyTransport,
-		},
+		proxyTransport: proxyTransport,
 	}
 }
 
 func (s *SeleniumSessionService) CreateSessionOrQueue(requestBody map[string]interface{}) (map[string]interface{}, error) {
-	if err := s.authorizeSeleniumRequest(requestBody); err != nil {
-		return nil, err
-	}
-
 	if s.activeSessions.TryReserveSlot() {
 		result, err := s.createSessionInternal(requestBody)
 		if err != nil {
-			log.Println("Session creation failed, releasing previously reserved slot.")
 			s.activeSessions.ReleaseSlot()
 			s.ProcessQueue()
 			return nil, err
@@ -89,12 +80,16 @@ func (s *SeleniumSessionService) CreateSessionOrQueue(requestBody map[string]int
 		return result, nil
 	}
 
-	log.Printf("No free slots. Adding request to queue. In-progress: %d/%d, Queue: %d",
-		s.activeSessions.GetInProgressCount(), s.activeSessions.GetSeleniumSessionLimit(), s.activeSessions.GetQueueSize())
+	if !s.activeSessions.IsQueueEnabled() {
+		return nil, &HTTPError{StatusCode: http.StatusServiceUnavailable, Message: "No free slots. Queue is disabled."}
+	}
 
+	browser, version := extractBrowserNameAndVersion(requestBody)
 	future := make(chan dto.PendingRequestResult, 1)
 	pendingReq := &dto.PendingRequest{
 		RequestBody: requestBody,
+		Browser:     browser,
+		Version:     version,
 		Future:      future,
 		QueuedTime:  time.Now(),
 		StartTime:   time.Now().UnixMilli(),
@@ -102,18 +97,19 @@ func (s *SeleniumSessionService) CreateSessionOrQueue(requestBody map[string]int
 
 	if s.activeSessions.OfferToQueue(pendingReq) {
 		s.dispatchStatusUpdate()
+		timer := time.NewTimer(time.Duration(s.activeSessions.queueTimeoutMs) * time.Millisecond)
+		defer timer.Stop()
 		select {
 		case result := <-future:
 			if result.Err != nil {
 				return nil, result.Err
 			}
 			return result.Response, nil
-		case <-time.After(time.Duration(s.activeSessions.queueTimeoutMs) * time.Millisecond):
+		case <-timer.C:
 			return nil, fmt.Errorf("queue timeout")
 		}
 	}
 
-	log.Println("Queue is full. Rejecting request.")
 	return nil, &HTTPError{StatusCode: http.StatusServiceUnavailable, Message: "Session queue is full"}
 }
 
@@ -177,7 +173,7 @@ func (s *SeleniumSessionService) createSessionInternal(requestBody map[string]in
 		VNCEnabled:      enableVNC,
 		ContainerInfo:   containerInfo,
 	}
-	s.activeSessions.SessionSuccessfullyCreated(hubSessionID, seleniumSession)
+	s.activeSessions.SessionSuccessfullyCreated(hubSessionID, seleniumSession, s.newReverseProxy(seleniumSession))
 	s.dispatchStatusUpdate()
 
 	containerCapabilities, _ := responseValue["capabilities"].(map[string]interface{})
@@ -190,18 +186,12 @@ func (s *SeleniumSessionService) createSessionInternal(requestBody map[string]in
 		if effectiveHost == "" {
 			effectiveHost = s.serverAddress
 		}
-		if effectiveHost == "0.0.0.0" {
-			log.Println("The advertised host is '0.0.0.0'. This is likely incorrect. Please set JELENOID_PUBLIC_HOST.")
-		}
 
 		devToolsURL := fmt.Sprintf("ws://%s:%d/session/%s/se/cdp", effectiveHost, s.serverPort, hubSessionID)
 		containerCapabilities["se:cdp"] = devToolsURL
 	}
 
 	responseValue["sessionId"] = hubSessionID
-
-	sessionInfo := s.sessionPublisher.CreateSessionAndPublish("selenium", browserInfo.Version)
-	seleniumSession.SessionInfo = sessionInfo
 
 	return map[string]interface{}{"value": responseValue}, nil
 }
@@ -211,73 +201,51 @@ func (s *SeleniumSessionService) DeleteSession(hubSessionID string) {
 	s.dispatchStatusUpdate()
 	if session != nil {
 		go s.dockerService.StopContainer(session.ContainerInfo.ContainerID)
-		s.sessionPublisher.EndSessionByRemoteAndPublish(session.SessionInfo)
 		s.ProcessQueue()
 	}
 }
 
 func (s *SeleniumSessionService) ProcessQueue() {
-	if s.activeSessions.GetQueueSize() > 0 {
-		if s.activeSessions.TryReserveSlot() {
-			nextRequest := s.activeSessions.PollFromQueue()
-			s.dispatchStatusUpdate()
-			if nextRequest != nil {
-				log.Println("Processing next request from queue...")
-				result, err := s.createSessionInternal(nextRequest.RequestBody)
-				if err != nil {
-					s.activeSessions.ReleaseSlot()
-					nextRequest.Future <- dto.PendingRequestResult{Err: err}
-					s.ProcessQueue()
-				} else {
-					nextRequest.Future <- dto.PendingRequestResult{Response: result}
-				}
-			} else {
-				s.activeSessions.ReleaseSlot()
-			}
+	for s.activeSessions.GetQueueSize() > 0 {
+		if !s.activeSessions.TryReserveSlot() {
+			return
 		}
+		nextRequest := s.activeSessions.PollFromQueue()
+		s.dispatchStatusUpdate()
+		if nextRequest == nil {
+			s.activeSessions.ReleaseSlot()
+			continue
+		}
+		result, err := s.createSessionInternal(nextRequest.RequestBody)
+		if err != nil {
+			s.activeSessions.ReleaseSlot()
+			nextRequest.Future <- dto.PendingRequestResult{Err: err}
+			continue
+		}
+		nextRequest.Future <- dto.PendingRequestResult{Response: result}
 	}
 }
 
-func (s *SeleniumSessionService) ProxyRequest(hubSessionID string, method string, relativePath string, headers http.Header, body []byte) (*http.Response, error) {
-	session := s.activeSessions.Get(hubSessionID)
-	if session == nil {
-		log.Printf("PROXY: Session %s not found. Active sessions: %d", hubSessionID, len(s.activeSessions.GetSeleniumActiveSessions()))
-		return nil, &HTTPError{StatusCode: http.StatusNotFound, Message: "Session not found: " + hubSessionID}
-	}
+func (s *SeleniumSessionService) newReverseProxy(session *dto.SeleniumSession) *httputil.ReverseProxy {
+	targetHost := session.ContainerInfo.ContainerName + ":4444"
+	hubID := session.HubSessionID
+	remoteID := session.RemoteSessionID
+	oldPrefix := "/wd/hub/session/" + hubID
+	newPrefix := "/session/" + remoteID
 
-	log.Printf("PROXY: Found session %s -> remote %s, method=%s path=%s", hubSessionID, session.RemoteSessionID, method, relativePath)
-
-	session.UpdateActivity()
-
-	containerInfo := session.ContainerInfo
-	pathForContainer := strings.Replace(relativePath, hubSessionID, session.RemoteSessionID, 1)
-
-	targetURL := fmt.Sprintf("http://%s:4444%s", containerInfo.ContainerName, pathForContainer)
-
-	var reqBody io.Reader
-	if method != "GET" && len(body) > 0 {
-		reqBody = bytes.NewReader(body)
-	}
-
-	req, err := http.NewRequest(method, targetURL, reqBody)
-	if err != nil {
-		return nil, err
-	}
-
-	for key, values := range headers {
-		if !isRestrictedHeader(key) {
-			for _, v := range values {
-				req.Header.Add(key, v)
+	return &httputil.ReverseProxy{
+		Director: func(req *http.Request) {
+			session.UpdateActivity()
+			req.URL.Scheme = "http"
+			req.URL.Host = targetHost
+			req.Host = targetHost
+			if path := req.URL.Path; strings.HasPrefix(path, oldPrefix) {
+				req.URL.Path = newPrefix + path[len(oldPrefix):]
 			}
-		}
+		},
+		Transport:     s.proxyTransport,
+		FlushInterval: 100 * time.Millisecond,
 	}
-
-	resp, err := s.proxyClient.Do(req)
-	if err != nil {
-		return nil, &HTTPError{StatusCode: http.StatusBadGateway, Message: fmt.Sprintf("Failed to proxy request to container: %v", err)}
-	}
-
-	return resp, nil
 }
 
 func (s *SeleniumSessionService) UploadFileToSession(hubSessionID string, fileBytes []byte) (string, error) {
@@ -289,12 +257,12 @@ func (s *SeleniumSessionService) UploadFileToSession(hubSessionID string, fileBy
 	return s.dockerService.CopyFileToContainer(session.ContainerInfo.ContainerID, fileBytes)
 }
 
-func (s *SeleniumSessionService) StreamLogsForSession(hubSessionID string) (<-chan []byte, error) {
+func (s *SeleniumSessionService) StreamLogsForSession(ctx context.Context, hubSessionID string) (<-chan []byte, error) {
 	session := s.activeSessions.Get(hubSessionID)
 	if session == nil {
 		return nil, &HTTPError{StatusCode: http.StatusNotFound, Message: "Session not found: " + hubSessionID}
 	}
-	return s.dockerService.StreamContainerLogs(session.ContainerInfo.ContainerID)
+	return s.dockerService.StreamContainerLogs(ctx, session.ContainerInfo.ContainerID)
 }
 
 func (s *SeleniumSessionService) dispatchStatusUpdate() {
@@ -339,50 +307,6 @@ func (s *SeleniumSessionService) findImageForRequest(requestBody map[string]inte
 	return nil
 }
 
-func (s *SeleniumSessionService) authorizeSeleniumRequest(requestBody map[string]interface{}) error {
-	if s.authToken == "" {
-		return nil
-	}
-
-	capabilities, _ := requestBody["capabilities"].(map[string]interface{})
-	if capabilities == nil {
-		return &HTTPError{StatusCode: http.StatusUnauthorized, Message: "Invalid or missing jelenoidToken in selenoid:options"}
-	}
-
-	token := ""
-	alwaysMatch, _ := capabilities["alwaysMatch"].(map[string]interface{})
-	if alwaysMatch != nil {
-		if options, ok := alwaysMatch["selenoid:options"].(map[string]interface{}); ok {
-			if t, ok := options["jelenoidToken"].(string); ok {
-				token = t
-				delete(options, "jelenoidToken")
-			}
-		}
-	}
-
-	if token == "" {
-		firstMatch, _ := capabilities["firstMatch"].([]interface{})
-		for _, fm := range firstMatch {
-			if match, ok := fm.(map[string]interface{}); ok {
-				if options, ok := match["selenoid:options"].(map[string]interface{}); ok {
-					if _, ok := options["jelenoidToken"]; ok {
-						token, _ = options["jelenoidToken"].(string)
-						delete(options, "jelenoidToken")
-						break
-					}
-				}
-			}
-		}
-	}
-
-	if s.authToken != token {
-		log.Println("Unauthorized Selenium connection attempt.")
-		return &HTTPError{StatusCode: http.StatusUnauthorized, Message: "Invalid or missing jelenoidToken in selenoid:options"}
-	}
-
-	return nil
-}
-
 func findSelenoidOptions(requestBody map[string]interface{}) map[string]interface{} {
 	capabilities, _ := requestBody["capabilities"].(map[string]interface{})
 	if capabilities == nil {
@@ -408,15 +332,46 @@ func findSelenoidOptions(requestBody map[string]interface{}) map[string]interfac
 	return make(map[string]interface{})
 }
 
+func extractBrowserNameAndVersion(requestBody map[string]interface{}) (string, string) {
+	capabilities, _ := requestBody["capabilities"].(map[string]interface{})
+	if capabilities == nil {
+		return "unknown", "unknown"
+	}
+	alwaysMatch, _ := capabilities["alwaysMatch"].(map[string]interface{})
+	if alwaysMatch == nil {
+		alwaysMatch = map[string]interface{}{}
+	}
+	firstMatch, _ := capabilities["firstMatch"].([]interface{})
+	for _, fm := range firstMatch {
+		fmMap, ok := fm.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		merged := make(map[string]interface{}, len(alwaysMatch)+len(fmMap))
+		for k, v := range alwaysMatch {
+			merged[k] = v
+		}
+		for k, v := range fmMap {
+			merged[k] = v
+		}
+		name, _ := merged["browserName"].(string)
+		if name == "" {
+			continue
+		}
+		ver, _ := merged["browserVersion"].(string)
+		return name, ver
+	}
+	name, _ := alwaysMatch["browserName"].(string)
+	if name == "" {
+		return "unknown", "unknown"
+	}
+	ver, _ := alwaysMatch["browserVersion"].(string)
+	return name, ver
+}
+
 func getBoolOption(options map[string]interface{}, key string) bool {
 	val, ok := options[key].(bool)
 	return ok && val
-}
-
-func isRestrictedHeader(name string) bool {
-	lower := strings.ToLower(name)
-	return lower == "content-length" || lower == "transfer-encoding" ||
-		lower == "host" || lower == "connection" || lower == "upgrade"
 }
 
 type HTTPError struct {
@@ -426,12 +381,4 @@ type HTTPError struct {
 
 func (e *HTTPError) Error() string {
 	return e.Message
-}
-
-func encodeMap(m map[string]interface{}) string {
-	vals := url.Values{}
-	for k, v := range m {
-		vals.Set(k, fmt.Sprintf("%v", v))
-	}
-	return vals.Encode()
 }
