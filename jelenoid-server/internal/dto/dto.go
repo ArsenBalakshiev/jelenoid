@@ -74,10 +74,12 @@ func (s *SeleniumSession) GetStartTime() time.Time {
 }
 
 type PendingRequest struct {
-	RequestBody map[string]interface{}  `json:"requestBody"`
+	RequestBody map[string]interface{}    `json:"requestBody"`
+	Browser     string                    `json:"browser"`
+	Version     string                    `json:"version"`
 	Future      chan PendingRequestResult `json:"-"`
-	QueuedTime  time.Time                `json:"queuedTime"`
-	StartTime   int64                    `json:"startTime"`
+	QueuedTime  time.Time                 `json:"queuedTime"`
+	StartTime   int64                     `json:"startTime"`
 }
 
 type PendingRequestResult struct {

@@ -16,39 +16,11 @@ func (s *StatusService) BuildStatus() *dto.StatusResponse {
 	}
 
 	pendingReqs := s.activeSessions.GetSeleniumPendingRequests()
-	var queuedInfos []dto.QueuedRequestInfo
+	queuedInfos := make([]dto.QueuedRequestInfo, 0, len(pendingReqs))
 	for _, req := range pendingReqs {
-		browserName := "unknown"
-		browserVersion := "unknown"
-		if caps, ok := req.RequestBody["capabilities"].(map[string]interface{}); ok {
-			alwaysMatch, _ := caps["alwaysMatch"].(map[string]interface{})
-			firstMatch, _ := caps["firstMatch"].([]interface{})
-			if alwaysMatch == nil {
-				alwaysMatch = make(map[string]interface{})
-			}
-			for _, fm := range firstMatch {
-				fmMap, ok := fm.(map[string]interface{})
-				if !ok {
-					continue
-				}
-				merged := make(map[string]interface{})
-				for k, v := range alwaysMatch {
-					merged[k] = v
-				}
-				for k, v := range fmMap {
-					merged[k] = v
-				}
-				if name, ok := merged["browserName"].(string); ok {
-					browserName = name
-				}
-				if ver, ok := merged["browserVersion"].(string); ok {
-					browserVersion = ver
-				}
-			}
-		}
 		queuedInfos = append(queuedInfos, dto.QueuedRequestInfo{
-			Browser:    browserName,
-			Version:    browserVersion,
+			Browser:    nonemptyString(req.Browser, "unknown"),
+			Version:    req.Version,
 			QueuedTime: req.QueuedTime,
 		})
 	}
@@ -110,4 +82,11 @@ func (s *StatusService) BuildStatus() *dto.StatusResponse {
 		Selenium:   seleniumStat,
 		Playwright: playwrightStat,
 	}
+}
+
+func nonemptyString(s, fallback string) string {
+	if s == "" {
+		return fallback
+	}
+	return s
 }

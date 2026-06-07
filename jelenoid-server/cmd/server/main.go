@@ -134,8 +134,17 @@ func main() {
 	handler := handlers.CORSMiddleware(cfg.UIHosts, mux)
 
 	go func() {
-		for range statusChan {
-			statusNotifier.OnStatusChanged()
+		var timerCh <-chan time.Time
+		for {
+			select {
+			case <-statusChan:
+				if timerCh == nil {
+					timerCh = time.After(100 * time.Millisecond)
+				}
+			case <-timerCh:
+				statusNotifier.OnStatusChanged()
+				timerCh = nil
+			}
 		}
 	}()
 

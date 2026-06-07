@@ -84,9 +84,12 @@ func (s *SeleniumSessionService) CreateSessionOrQueue(requestBody map[string]int
 		return nil, &HTTPError{StatusCode: http.StatusServiceUnavailable, Message: "No free slots. Queue is disabled."}
 	}
 
+	browser, version := extractBrowserNameAndVersion(requestBody)
 	future := make(chan dto.PendingRequestResult, 1)
 	pendingReq := &dto.PendingRequest{
 		RequestBody: requestBody,
+		Browser:     browser,
+		Version:     version,
 		Future:      future,
 		QueuedTime:  time.Now(),
 		StartTime:   time.Now().UnixMilli(),
@@ -94,13 +97,15 @@ func (s *SeleniumSessionService) CreateSessionOrQueue(requestBody map[string]int
 
 	if s.activeSessions.OfferToQueue(pendingReq) {
 		s.dispatchStatusUpdate()
+		timer := time.NewTimer(time.Duration(s.activeSessions.queueTimeoutMs) * time.Millisecond)
+		defer timer.Stop()
 		select {
 		case result := <-future:
 			if result.Err != nil {
 				return nil, result.Err
 			}
 			return result.Response, nil
-		case <-time.After(time.Duration(s.activeSessions.queueTimeoutMs) * time.Millisecond):
+		case <-timer.C:
 			return nil, fmt.Errorf("queue timeout")
 		}
 	}
@@ -325,6 +330,43 @@ func findSelenoidOptions(requestBody map[string]interface{}) map[string]interfac
 	}
 
 	return make(map[string]interface{})
+}
+
+func extractBrowserNameAndVersion(requestBody map[string]interface{}) (string, string) {
+	capabilities, _ := requestBody["capabilities"].(map[string]interface{})
+	if capabilities == nil {
+		return "unknown", "unknown"
+	}
+	alwaysMatch, _ := capabilities["alwaysMatch"].(map[string]interface{})
+	if alwaysMatch == nil {
+		alwaysMatch = map[string]interface{}{}
+	}
+	firstMatch, _ := capabilities["firstMatch"].([]interface{})
+	for _, fm := range firstMatch {
+		fmMap, ok := fm.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		merged := make(map[string]interface{}, len(alwaysMatch)+len(fmMap))
+		for k, v := range alwaysMatch {
+			merged[k] = v
+		}
+		for k, v := range fmMap {
+			merged[k] = v
+		}
+		name, _ := merged["browserName"].(string)
+		if name == "" {
+			continue
+		}
+		ver, _ := merged["browserVersion"].(string)
+		return name, ver
+	}
+	name, _ := alwaysMatch["browserName"].(string)
+	if name == "" {
+		return "unknown", "unknown"
+	}
+	ver, _ := alwaysMatch["browserVersion"].(string)
+	return name, ver
 }
 
 func getBoolOption(options map[string]interface{}, key string) bool {
