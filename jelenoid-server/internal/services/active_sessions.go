@@ -24,22 +24,24 @@ type ActiveSessionsService struct {
 	playwrightMaxSessions  int
 	playwrightQueueLimit   int
 
-	seleniumSessions     sync.Map
-	seleniumInProgress   atomic.Int32
+	seleniumSessionsMu sync.RWMutex
+	seleniumSessions   map[string]*sessionEntry
+	seleniumInProgress atomic.Int32
 
-	seleniumQueue     *queue[*dto.PendingRequest]
-	seleniumQueueMu   sync.Mutex
+	seleniumQueue   *queue[*dto.PendingRequest]
+	seleniumQueueMu sync.Mutex
 
-	playwrightSessions   sync.Map
+	playwrightSessionsMu sync.RWMutex
+	playwrightSessions   map[*websocket.Conn]*PlaywrightSessionPair
 	playwrightSemaphore  chan struct{}
 
-	playwrightQueue     *queue[*PlaywrightQueuedSession]
-	playwrightQueueMu   sync.Mutex
+	playwrightQueue   *queue[*PlaywrightQueuedSession]
+	playwrightQueueMu sync.Mutex
 
-	dockerService      *DockerExternalService
-	seleniumService     *SeleniumSessionService
-	statusChan          chan struct{}
-	enableQueue         bool
+	dockerService  *DockerExternalService
+	seleniumService *SeleniumSessionService
+	statusChan      chan struct{}
+	enableQueue     bool
 }
 
 type PlaywrightSessionPair struct {
@@ -67,17 +69,19 @@ func NewActiveSessionsService(
 ) *ActiveSessionsService {
 	return &ActiveSessionsService{
 		seleniumSessionLimit:  seleniumSessionLimit,
-		seleniumQueueLimit:     seleniumQueueLimit,
-		sessionTimeoutMs:       sessionTimeoutMs,
-		queueTimeoutMs:         queueTimeoutMs,
-		playwrightMaxSessions:  playwrightMaxSessions,
-		playwrightQueueLimit:   playwrightQueueLimit,
-		seleniumQueue:          newQueue[*dto.PendingRequest](seleniumQueueLimit),
-		playwrightSemaphore:    make(chan struct{}, playwrightMaxSessions),
-		playwrightQueue:        newQueue[*PlaywrightQueuedSession](playwrightQueueLimit),
-		dockerService:          dockerService,
-		statusChan:             statusChan,
-		enableQueue:            enableQueue,
+		seleniumQueueLimit:    seleniumQueueLimit,
+		sessionTimeoutMs:      sessionTimeoutMs,
+		queueTimeoutMs:        queueTimeoutMs,
+		playwrightMaxSessions: playwrightMaxSessions,
+		playwrightQueueLimit:  playwrightQueueLimit,
+		seleniumSessions:      make(map[string]*sessionEntry),
+		seleniumQueue:         newQueue[*dto.PendingRequest](seleniumQueueLimit),
+		playwrightSessions:    make(map[*websocket.Conn]*PlaywrightSessionPair),
+		playwrightSemaphore:   make(chan struct{}, playwrightMaxSessions),
+		playwrightQueue:       newQueue[*PlaywrightQueuedSession](playwrightQueueLimit),
+		dockerService:         dockerService,
+		statusChan:            statusChan,
+		enableQueue:           enableQueue,
 	}
 }
 
@@ -103,33 +107,42 @@ func (s *ActiveSessionsService) ReleaseSlot() {
 }
 
 func (s *ActiveSessionsService) SessionSuccessfullyCreated(hubSessionID string, session *dto.SeleniumSession, proxy *httputil.ReverseProxy) {
-	s.seleniumSessions.Store(hubSessionID, &sessionEntry{session: session, proxy: proxy})
+	s.seleniumSessionsMu.Lock()
+	s.seleniumSessions[hubSessionID] = &sessionEntry{session: session, proxy: proxy}
+	s.seleniumSessionsMu.Unlock()
 }
 
 func (s *ActiveSessionsService) SessionDeleted(hubSessionID string) *dto.SeleniumSession {
-	val, ok := s.seleniumSessions.LoadAndDelete(hubSessionID)
+	s.seleniumSessionsMu.Lock()
+	entry, ok := s.seleniumSessions[hubSessionID]
 	if !ok {
+		s.seleniumSessionsMu.Unlock()
 		return nil
 	}
-	entry := val.(*sessionEntry)
+	delete(s.seleniumSessions, hubSessionID)
+	s.seleniumSessionsMu.Unlock()
 	s.ReleaseSlot()
 	return entry.session
 }
 
 func (s *ActiveSessionsService) Get(sessionID string) *dto.SeleniumSession {
-	val, ok := s.seleniumSessions.Load(sessionID)
+	s.seleniumSessionsMu.RLock()
+	defer s.seleniumSessionsMu.RUnlock()
+	entry, ok := s.seleniumSessions[sessionID]
 	if !ok {
 		return nil
 	}
-	return val.(*sessionEntry).session
+	return entry.session
 }
 
 func (s *ActiveSessionsService) GetProxy(sessionID string) *httputil.ReverseProxy {
-	val, ok := s.seleniumSessions.Load(sessionID)
+	s.seleniumSessionsMu.RLock()
+	defer s.seleniumSessionsMu.RUnlock()
+	entry, ok := s.seleniumSessions[sessionID]
 	if !ok {
 		return nil
 	}
-	return val.(*sessionEntry).proxy
+	return entry.proxy
 }
 
 func (s *ActiveSessionsService) OfferToQueue(req *dto.PendingRequest) bool {
@@ -160,11 +173,12 @@ func (s *ActiveSessionsService) GetInProgressCount() int {
 }
 
 func (s *ActiveSessionsService) GetSeleniumActiveSessions() map[string]*dto.SeleniumSession {
-	result := make(map[string]*dto.SeleniumSession)
-	s.seleniumSessions.Range(func(key, value any) bool {
-		result[key.(string)] = value.(*sessionEntry).session
-		return true
-	})
+	s.seleniumSessionsMu.RLock()
+	defer s.seleniumSessionsMu.RUnlock()
+	result := make(map[string]*dto.SeleniumSession, len(s.seleniumSessions))
+	for id, entry := range s.seleniumSessions {
+		result[id] = entry.session
+	}
 	return result
 }
 
@@ -196,18 +210,17 @@ func (s *ActiveSessionsService) CheckInactiveSessions() {
 		containerID string
 	}
 
+	s.seleniumSessionsMu.Lock()
 	var timedOut []timedOutSession
-	s.seleniumSessions.Range(func(key, value any) bool {
-		entry := value.(*sessionEntry)
-		session := entry.session
-		if now-session.GetLastActivity() > s.sessionTimeoutMs {
-			s.seleniumSessions.Delete(key)
+	for id, entry := range s.seleniumSessions {
+		if now-entry.session.GetLastActivity() > s.sessionTimeoutMs {
 			timedOut = append(timedOut, timedOutSession{
-				containerID: session.ContainerInfo.ContainerID,
+				containerID: entry.session.ContainerInfo.ContainerID,
 			})
+			delete(s.seleniumSessions, id)
 		}
-		return true
-	})
+	}
+	s.seleniumSessionsMu.Unlock()
 
 	for range timedOut {
 		s.ReleaseSlot()
@@ -240,12 +253,12 @@ func (s *ActiveSessionsService) CheckInactiveSessions() {
 }
 
 func (s *ActiveSessionsService) Cleanup() {
-	s.seleniumSessions.Range(func(key, value any) bool {
-		entry := value.(*sessionEntry)
+	s.seleniumSessionsMu.Lock()
+	for id, entry := range s.seleniumSessions {
 		go s.dockerService.StopContainer(entry.session.ContainerInfo.ContainerID)
-		s.seleniumSessions.Delete(key)
-		return true
-	})
+		delete(s.seleniumSessions, id)
+	}
+	s.seleniumSessionsMu.Unlock()
 
 	s.seleniumQueueMu.Lock()
 	s.seleniumQueue.clear()
@@ -283,23 +296,27 @@ func (s *ActiveSessionsService) RemoveFromPlaywrightQueue(conn *websocket.Conn) 
 }
 
 func (s *ActiveSessionsService) PutPlaywrightActiveSession(conn *websocket.Conn, pair *PlaywrightSessionPair) {
-	s.playwrightSessions.Store(conn, pair)
+	s.playwrightSessionsMu.Lock()
+	s.playwrightSessions[conn] = pair
+	s.playwrightSessionsMu.Unlock()
 }
 
 func (s *ActiveSessionsService) RemovePlaywrightActiveSession(conn *websocket.Conn) *PlaywrightSessionPair {
-	val, ok := s.playwrightSessions.LoadAndDelete(conn)
+	s.playwrightSessionsMu.Lock()
+	pair, ok := s.playwrightSessions[conn]
 	if !ok {
+		s.playwrightSessionsMu.Unlock()
 		return nil
 	}
-	return val.(*PlaywrightSessionPair)
+	delete(s.playwrightSessions, conn)
+	s.playwrightSessionsMu.Unlock()
+	return pair
 }
 
 func (s *ActiveSessionsService) GetPlaywrightActiveSession(conn *websocket.Conn) *PlaywrightSessionPair {
-	val, ok := s.playwrightSessions.Load(conn)
-	if !ok {
-		return nil
-	}
-	return val.(*PlaywrightSessionPair)
+	s.playwrightSessionsMu.RLock()
+	defer s.playwrightSessionsMu.RUnlock()
+	return s.playwrightSessions[conn]
 }
 
 func (s *ActiveSessionsService) TryAcquirePlaywrightSlot() bool {
@@ -324,11 +341,12 @@ func (s *ActiveSessionsService) UsedPlaywrightSlots() int {
 }
 
 func (s *ActiveSessionsService) GetPlaywrightActiveSessions() map[*websocket.Conn]*PlaywrightSessionPair {
-	result := make(map[*websocket.Conn]*PlaywrightSessionPair)
-	s.playwrightSessions.Range(func(key, value any) bool {
-		result[key.(*websocket.Conn)] = value.(*PlaywrightSessionPair)
-		return true
-	})
+	s.playwrightSessionsMu.RLock()
+	defer s.playwrightSessionsMu.RUnlock()
+	result := make(map[*websocket.Conn]*PlaywrightSessionPair, len(s.playwrightSessions))
+	for conn, pair := range s.playwrightSessions {
+		result[conn] = pair
+	}
 	return result
 }
 

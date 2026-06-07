@@ -44,12 +44,12 @@ func NewSeleniumSessionService(
 	}
 	proxyTransport := &http.Transport{
 		DialContext:           dialer.DialContext,
-		MaxIdleConns:          2000,
-		MaxIdleConnsPerHost:   500,
-		MaxConnsPerHost:       500,
+		MaxIdleConns:          200,
+		MaxIdleConnsPerHost:   10,
+		MaxConnsPerHost:       0,
 		IdleConnTimeout:       60 * time.Second,
 		DisableCompression:    true,
-		ResponseHeaderTimeout: 300 * time.Second,
+		ResponseHeaderTimeout: 90 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 		ForceAttemptHTTP2:     false,
 	}
