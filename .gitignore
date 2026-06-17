@@ -100,3 +100,8 @@ container-manager/tmp/
 
 jelenoid-server-java/target/
 
+container-manager/go.sum
+
+jelenoid-server/jelenoid-server-test
+jelenoid-server/browsers.json
+

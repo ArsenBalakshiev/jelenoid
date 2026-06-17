@@ -4,10 +4,6 @@ import (
 	"github.com/balakshievas/jelenoid-server-go/internal/dto"
 )
 
-func NewStatusService(activeSessions *ActiveSessionsService) *StatusService {
-	return &StatusService{activeSessions: activeSessions}
-}
-
 func (s *StatusService) BuildStatus() *dto.StatusResponse {
 	sessions := s.activeSessions.GetSeleniumActiveSessions()
 	var seleniumSessions []dto.SeleniumSession
@@ -30,8 +26,8 @@ func (s *StatusService) BuildStatus() *dto.StatusResponse {
 		Used:           len(seleniumSessions),
 		Queued:         s.activeSessions.GetQueueSize(),
 		InProgress:     s.activeSessions.GetInProgressCount(),
-		ActiveSessions:  seleniumSessions,
-		QueuedSessions:  queuedInfos,
+		ActiveSessions: seleniumSessions,
+		QueuedSessions: queuedInfos,
 	}
 
 	activePW := s.activeSessions.GetPlaywrightActiveSessions()
@@ -76,6 +72,24 @@ func (s *StatusService) BuildStatus() *dto.StatusResponse {
 		QueuedSessions:     len(queuedPW),
 		ActiveSessionPairs: activePairInfos,
 		QueuedSessionPairs: queuedPairInfos,
+	}
+
+	if s.pool != nil {
+		ps := s.pool.Stats()
+		playwrightStat.Pool = &dto.PlaywrightPoolStatsDTO{
+			Enabled: ps.Enabled,
+			MaxSize: ps.MaxSize,
+			Total:   ps.Total,
+			ByKey:   make(map[string]dto.PlaywrightPoolKeyStatsDTO, len(ps.ByKey)),
+		}
+		for k, v := range ps.ByKey {
+			playwrightStat.Pool.ByKey[k] = dto.PlaywrightPoolKeyStatsDTO{
+				Starting: v.Starting,
+				Ready:    v.Ready,
+				InUse:    v.InUse,
+				Draining: v.Draining,
+			}
+		}
 	}
 
 	return &dto.StatusResponse{

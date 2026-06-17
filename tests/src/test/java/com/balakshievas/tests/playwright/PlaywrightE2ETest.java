@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PlaywrightE2ETest extends BasePlaywrightJelenoidTest {
 
-    private static final String JELENOID_WS = "ws://localhost:4444/playwright";
+    private static final String JELENOID_WS = "ws://localhost:4445/playwright";
     private static final String TEST_APP_BASE = "http://host.docker.internal:3000";
 
     @Test

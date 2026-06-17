@@ -45,12 +45,12 @@ type ContainerInfoRecord struct {
 }
 
 type SeleniumSession struct {
-	HubSessionID   string         `json:"hubSessionId"`
-	RemoteSessionID string        `json:"remoteSessionId"`
-	BrowserName    string         `json:"browserName"`
-	Version        string         `json:"version"`
-	VNCEnabled     bool           `json:"vncEnabled"`
-	ContainerInfo  *ContainerInfo `json:"containerInfo"`
+	HubSessionID    string         `json:"hubSessionId"`
+	RemoteSessionID string         `json:"remoteSessionId"`
+	BrowserName     string         `json:"browserName"`
+	Version         string         `json:"version"`
+	VNCEnabled      bool           `json:"vncEnabled"`
+	ContainerInfo   *ContainerInfo `json:"containerInfo"`
 }
 
 func (s *SeleniumSession) UpdateActivity() {
@@ -99,34 +99,49 @@ type StatusResponse struct {
 }
 
 type SeleniumStat struct {
-	Total           int               `json:"total"`
-	Used            int               `json:"used"`
-	Queued          int               `json:"queued"`
-	InProgress      int               `json:"inProgress"`
-	ActiveSessions  []SeleniumSession `json:"activeSeleniumSessions"`
-	QueuedSessions  []QueuedRequestInfo `json:"queuedSeleniumSession"`
+	Total          int                 `json:"total"`
+	Used           int                 `json:"used"`
+	Queued         int                 `json:"queued"`
+	InProgress     int                 `json:"inProgress"`
+	ActiveSessions []SeleniumSession   `json:"activeSeleniumSessions"`
+	QueuedSessions []QueuedRequestInfo `json:"queuedSeleniumSession"`
 }
 
 type PlaywrightStat struct {
-	MaxSessions         int               `json:"maxPlaywrightSessionsSize"`
-	ActiveSessions      int               `json:"activePlaywrightSessionsSize"`
-	QueuedSessions      int               `json:"queuedPlaywrightSessionsSize"`
-	ActiveSessionPairs  []SessionPairInfo `json:"activePlaywrightSessions"`
-	QueuedSessionPairs  []SessionPairInfo `json:"queuedPlaywrightSessions"`
+	MaxSessions        int                     `json:"maxPlaywrightSessionsSize"`
+	ActiveSessions     int                     `json:"activePlaywrightSessionsSize"`
+	QueuedSessions     int                     `json:"queuedPlaywrightSessionsSize"`
+	ActiveSessionPairs []SessionPairInfo       `json:"activePlaywrightSessions"`
+	QueuedSessionPairs []SessionPairInfo       `json:"queuedPlaywrightSessions"`
+	Pool               *PlaywrightPoolStatsDTO `json:"pool,omitempty"`
+}
+
+type PlaywrightPoolStatsDTO struct {
+	Enabled bool                                 `json:"enabled"`
+	MaxSize int                                  `json:"maxSize"`
+	Total   int                                  `json:"total"`
+	ByKey   map[string]PlaywrightPoolKeyStatsDTO `json:"byKey"`
+}
+
+type PlaywrightPoolKeyStatsDTO struct {
+	Starting int `json:"starting"`
+	Ready    int `json:"ready"`
+	InUse    int `json:"inUse"`
+	Draining int `json:"draining"`
 }
 
 type SessionPairInfo struct {
-	ClientSessionID  string         `json:"clientSessionId"`
-	ClientSessionURL  string         `json:"clientSessionUrl"`
-	ContainerClientURL string        `json:"containerClientUrl"`
-	PlaywrightVersion string         `json:"playwrightVersion"`
-	ContainerInfo     *ContainerInfo `json:"containerInfo"`
+	ClientSessionID    string         `json:"clientSessionId"`
+	ClientSessionURL   string         `json:"clientSessionUrl"`
+	ContainerClientURL string         `json:"containerClientUrl"`
+	PlaywrightVersion  string         `json:"playwrightVersion"`
+	ContainerInfo      *ContainerInfo `json:"containerInfo"`
 }
 
 type BrowsersConfig map[string]BrowserEntry
 
 type BrowserEntry struct {
-	Default  string                       `json:"default"`
+	Default  string                        `json:"default"`
 	Versions map[string]BrowserVersionInfo `json:"versions"`
 }
 
