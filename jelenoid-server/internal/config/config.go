@@ -7,36 +7,46 @@ import (
 )
 
 type Config struct {
-	ServerPort           int
-	PublicHost           string
-	ContainerManagerAddr string
-	SessionLimit         int
-	QueueLimit           int
-	BrowsersConfigDir    string
-	QueueTimeoutMs       int64
-	SessionTimeoutMs    int64
-	StartupTimeoutMs     int64
-	UIHosts             []string
+	ServerPort            int
+	PublicHost            string
+	ContainerManagerAddr  string
+	SessionLimit          int
+	QueueLimit            int
+	BrowsersConfigDir     string
+	QueueTimeoutMs        int64
+	SessionTimeoutMs      int64
+	StartupTimeoutMs      int64
+	UIHosts               []string
 	PlaywrightMaxSessions int
 	PlaywrightQueueLimit  int
-	EnableQueue          bool
+	EnableQueue           bool
+
+	PlaywrightPoolEnabled   bool
+	PlaywrightPoolIdleMs    int64
+	PlaywrightPoolMaxSize   int
+	PlaywrightPoolMaxPerKey int
 }
 
 func Load() *Config {
 	return &Config{
-		ServerPort:           getEnvInt("JELENOID_PORT", 4444),
-		PublicHost:           getEnvStr("JELENOID_PUBLIC_HOST", "0.0.0.0"),
-		ContainerManagerAddr: getEnvStr("CONTAINER_MANAGER_ADDRESS", "http://container-manager:8080"),
-		SessionLimit:         getEnvInt("PARALLEL_SESSIONS", 10),
-		QueueLimit:           getEnvInt("QUEUE_LIMIT", 100),
-		BrowsersConfigDir:    getEnvStr("BROWSERS_FILE", "browsers.json"),
-		QueueTimeoutMs:       getEnvInt64("QUEUE_TIMEOUT", 30000),
-		SessionTimeoutMs:     getEnvInt64("SESSION_TIMEOUT", 600000),
-		StartupTimeoutMs:     getEnvInt64("STARTUP_TIMEOUT", 30000),
-		UIHosts:             getEnvSlice("UI_HOSTS_LIST", []string{"http://localhost:3000", "http://localhost:4444"}),
+		ServerPort:            getEnvInt("JELENOID_PORT", 4444),
+		PublicHost:            getEnvStr("JELENOID_PUBLIC_HOST", "0.0.0.0"),
+		ContainerManagerAddr:  getEnvStr("CONTAINER_MANAGER_ADDRESS", "http://container-manager:8080"),
+		SessionLimit:          getEnvInt("PARALLEL_SESSIONS", 10),
+		QueueLimit:            getEnvInt("QUEUE_LIMIT", 100),
+		BrowsersConfigDir:     getEnvStr("BROWSERS_FILE", "browsers.json"),
+		QueueTimeoutMs:        getEnvInt64("QUEUE_TIMEOUT", 30000),
+		SessionTimeoutMs:      getEnvInt64("SESSION_TIMEOUT", 600000),
+		StartupTimeoutMs:      getEnvInt64("STARTUP_TIMEOUT", 30000),
+		UIHosts:               getEnvSlice("UI_HOSTS_LIST", []string{"http://localhost:3000", "http://localhost:4444"}),
 		PlaywrightMaxSessions: getEnvInt("PLAYWRIGHT_SESSION_LIMIT", 10),
 		PlaywrightQueueLimit:  getEnvInt("PLAYWRIGHT_QUEUE_LIMIT", 100),
-		EnableQueue:          getEnvBool("ENABLE_QUEUE", true),
+		EnableQueue:           getEnvBool("ENABLE_QUEUE", true),
+
+		PlaywrightPoolEnabled:   getEnvBool("PLAYWRIGHT_CONTAINER_POOL_ENABLED", false),
+		PlaywrightPoolIdleMs:    getEnvInt64("PLAYWRIGHT_CONTAINER_POOL_IDLE_MS", 60000),
+		PlaywrightPoolMaxSize:   getEnvInt("PLAYWRIGHT_CONTAINER_POOL_MAX_SIZE", 10),
+		PlaywrightPoolMaxPerKey: getEnvInt("PLAYWRIGHT_CONTAINER_POOL_MAX_PER_KEY", 5),
 	}
 }
 

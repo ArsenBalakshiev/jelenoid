@@ -49,15 +49,22 @@ class PlaywrightE2ETest extends BasePlaywrightJelenoidTest {
     void shouldInterceptNetworkRequests() {
         Page page = createPage(JELENOID_WS);
 
-        List<Request> interceptedRequests = new ArrayList<>();
-        page.onRequest(request -> {
-            interceptedRequests.add(request);
-        });
+        assertEquals("chromium", page.context().browser().browserType().name(),
+                "хаб должен обслуживать chromium-сессии");
 
-        page.navigate(TEST_APP_BASE + "/");
+        List<Request> interceptedRequests = new ArrayList<>();
+        List<com.microsoft.playwright.Response> interceptedResponses = new ArrayList<>();
+        page.onRequest(request -> interceptedRequests.add(request));
+        page.onResponse(response -> interceptedResponses.add(response));
+
+        page.waitForResponse("**/", () ->
+                page.navigate(TEST_APP_BASE + "/"));
         page.waitForLoadState();
 
-        assertFalse(interceptedRequests.isEmpty());
+        assertFalse(interceptedRequests.isEmpty(), "должен быть хотя бы один request");
+        assertFalse(interceptedResponses.isEmpty(), "должен быть хотя бы один response");
+        assertTrue(interceptedRequests.stream().anyMatch(r -> r.url().endsWith("/")),
+                "должен быть перехвачен запрос на /");
     }
 
     @Test
@@ -286,7 +293,9 @@ class PlaywrightE2ETest extends BasePlaywrightJelenoidTest {
         Page page = createPage(JELENOID_WS);
         page.navigate(TEST_APP_BASE + "/upload.html");
 
-        page.locator("input[type='file']").setInputFiles(Path.of("pom.xml"));
+        page.locator("input[type='file']").setInputFiles(
+                Path.of(System.getProperty("user.dir"),
+                        "src", "test", "resources", "test-upload.txt"));
 
         page.locator("#uploadBtn").click();
 
@@ -367,6 +376,21 @@ class PlaywrightE2ETest extends BasePlaywrightJelenoidTest {
         assertDoesNotThrow(() -> {
             page.navigate(TEST_APP_BASE + "/");
         });
+    }
+
+    @Test
+    @DisplayName("E2E: Timeout 1ms на динамическом элементе — TimeoutError, не виснет")
+    void shouldHandleAggressiveTimeout() {
+        Page page = createPage(JELENOID_WS);
+        page.setDefaultTimeout(1);
+
+        long start = System.nanoTime();
+        assertThrows(com.microsoft.playwright.TimeoutError.class, () -> {
+            page.locator("#loadBtn").click();
+            page.locator("#content").waitFor();
+        });
+        long elapsedMs = (System.nanoTime() - start) / 1_000_000L;
+        assertTrue(elapsedMs < 5_000, "агрессивный таймаут не должен приводить к зависанию: " + elapsedMs + "ms");
     }
 
     @Test

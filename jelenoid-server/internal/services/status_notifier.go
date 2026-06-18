@@ -2,6 +2,11 @@ package services
 
 type StatusService struct {
 	activeSessions *ActiveSessionsService
+	pool           *PlaywrightContainerPool
+}
+
+func NewStatusService(activeSessions *ActiveSessionsService, pool *PlaywrightContainerPool) *StatusService {
+	return &StatusService{activeSessions: activeSessions, pool: pool}
 }
 
 type StatusNotifier struct {

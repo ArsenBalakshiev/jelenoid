@@ -17,12 +17,12 @@ type sessionEntry struct {
 }
 
 type ActiveSessionsService struct {
-	seleniumSessionLimit   int
-	seleniumQueueLimit     int
-	sessionTimeoutMs       int64
-	queueTimeoutMs         int64
-	playwrightMaxSessions  int
-	playwrightQueueLimit   int
+	seleniumSessionLimit  int
+	seleniumQueueLimit    int
+	sessionTimeoutMs      int64
+	queueTimeoutMs        int64
+	playwrightMaxSessions int
+	playwrightQueueLimit  int
 
 	seleniumSessionsMu sync.RWMutex
 	seleniumSessions   map[string]*sessionEntry
@@ -38,21 +38,22 @@ type ActiveSessionsService struct {
 	playwrightQueue   *queue[*PlaywrightQueuedSession]
 	playwrightQueueMu sync.Mutex
 
-	dockerService  *DockerExternalService
+	dockerService   *DockerExternalService
 	seleniumService *SeleniumSessionService
 	statusChan      chan struct{}
 	enableQueue     bool
 }
 
 type PlaywrightSessionPair struct {
-	ClientConn                 *websocket.Conn
-	ContainerConn              *websocket.Conn
-	ContainerInfo              *dto.ContainerInfo
-	Version                    string
-	ConnectionEstablished      atomic.Bool
-	Lock                       sync.Mutex
-	PendingMessages            [][]byte
-	RequestHeaders             http.Header
+	ClientConn            *websocket.Conn
+	ContainerConn         *websocket.Conn
+	ContainerInfo         *dto.ContainerInfo
+	PoolEntry             *poolEntry
+	Version               string
+	ConnectionEstablished atomic.Bool
+	Lock                  sync.Mutex
+	PendingMessages       [][]byte
+	RequestHeaders        http.Header
 }
 
 type PlaywrightQueuedSession struct {

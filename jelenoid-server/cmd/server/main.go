@@ -46,7 +46,15 @@ func main() {
 	)
 	activeSessions.SetSeleniumService(seleniumService)
 
-	statusService := services.NewStatusService(activeSessions)
+	playwrightPool := services.NewPlaywrightContainerPool(dockerService, services.PlaywrightPoolConfig{
+		Enabled:   cfg.PlaywrightPoolEnabled,
+		IdleMs:    cfg.PlaywrightPoolIdleMs,
+		MaxSize:   cfg.PlaywrightPoolMaxSize,
+		MaxPerKey: cfg.PlaywrightPoolMaxPerKey,
+	})
+	defer playwrightPool.StopAll()
+
+	statusService := services.NewStatusService(activeSessions, playwrightPool)
 	statusNotifier := services.NewStatusNotifier(sseHub, statusService)
 
 	sseHub.SetInitialDataBuilder(func() services.SSEEvent {
@@ -60,6 +68,7 @@ func main() {
 		activeSessions,
 		dockerService,
 		browserManager,
+		playwrightPool,
 		statusChan,
 		cfg.SessionTimeoutMs,
 	)
