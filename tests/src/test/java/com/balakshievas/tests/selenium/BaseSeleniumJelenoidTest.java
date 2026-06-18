@@ -16,9 +16,6 @@ public class BaseSeleniumJelenoidTest {
     protected static final String HUB_URL = System.getProperty("hub.url",
             "http://localhost:4444/wd/hub");
 
-    protected static final String TOKEN = System.getenv().getOrDefault("JELENOID_TOKEN",
-            "super-secret-password");
-
     private final ThreadLocal<WebDriver> driverThreadLocal = new ThreadLocal<>();
 
     protected WebDriver createDriver(ChromeOptions specificOptions) throws MalformedURLException {
@@ -28,7 +25,6 @@ public class BaseSeleniumJelenoidTest {
 
         Map<String, Object> selenoidOptions = new HashMap<>();
         selenoidOptions.put("enableVNC", true);
-        //selenoidOptions.put("jelenoidToken", TOKEN);
 
         options.setCapability("selenoid:options", selenoidOptions);
         if (specificOptions != null) {
@@ -51,8 +47,6 @@ public class BaseSeleniumJelenoidTest {
         options.setBrowserVersion(browserVersion);
 
         Map<String, Object> selenoidOptions = new HashMap<>();
-        //selenoidOptions.put("jelenoidToken", TOKEN);
-
         options.setCapability("selenoid:options", selenoidOptions);
         if (specificOptions != null) {
             options.merge(specificOptions);

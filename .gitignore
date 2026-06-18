@@ -93,6 +93,8 @@ tests/target/
 container-manager/target/
 container-manager/tmp/
 /build
+/browser-config/
+/target/
 
 *.exe
 

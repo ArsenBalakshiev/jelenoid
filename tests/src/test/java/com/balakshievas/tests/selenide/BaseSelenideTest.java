@@ -20,12 +20,9 @@ public abstract class BaseSelenideTest {
         Configuration.pageLoadTimeout = 60000;
         Configuration.timeout = 10000; // Глобальное ожидание (Smart Waits)
 
-        // 2. Передаем токен Jelenoid через стандартный ChromeOptions
         ChromeOptions options = new ChromeOptions();
         Map<String, Object> selenoidOptions = new HashMap<>();
-        selenoidOptions.put("jelenoidToken", System.getenv().getOrDefault("JELENOID_TOKEN", "super-secret-password"));
 
-        // Добавляем headless режим для быстрых прогонов (опционально)
         options.addArguments("--headless", "--no-sandbox", "--disable-dev-shm-usage");
 
         options.setCapability("selenoid:options", selenoidOptions);

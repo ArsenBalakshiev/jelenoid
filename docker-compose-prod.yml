@@ -57,6 +57,3 @@ services:
 networks:
   jelenoid-net:
     name: jelenoid-net
-
-volumes:
-  nats_data: {}

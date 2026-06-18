@@ -86,7 +86,6 @@ func main() {
 	mux.HandleFunc("POST /wd/hub/session", wdHubHandler.CreateSession)
 	mux.HandleFunc("DELETE /wd/hub/session", wdHubHandler.DeleteSession)
 	mux.HandleFunc("DELETE /wd/hub/session/{id}", wdHubHandler.DeleteSession)
-	mux.HandleFunc("POST /wd/hub/session/{id}/se/file", wdHubHandler.UploadFile)
 	mux.HandleFunc("POST /wd/hub/session/{id}/file", wdHubHandler.UploadFile)
 	mux.HandleFunc("/wd/hub/session/{id}/", wdHubHandler.ProxyRequest)
 

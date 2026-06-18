@@ -62,5 +62,4 @@ networks:
 
 volumes:
   go-mod-cache:
-  nats_data: {}
 
