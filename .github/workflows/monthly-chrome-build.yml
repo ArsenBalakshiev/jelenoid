@@ -56,24 +56,35 @@ jobs:
           set -eu
           VERSION="${{ steps.resolve.outputs.version }}"
           OWNER="${{ github.repository_owner }}"
+          TAG="chrome-$VERSION"
           # In GHCR, ghcr.io/<owner>/jelenoid:chrome-150.0.x is one package
           # (`jelenoid`) with a tag `chrome-150.0.x`. So we list versions of
           # the `jelenoid` package and look for our tag.
+          # 404 means the package doesn't exist yet (first push) — treat as empty tag list.
           echo "Listing existing tags for ghcr.io/$OWNER/jelenoid"
-          TAGS=$(curl -fsSL \
+          HTTP_CODE=$(curl -s -o /tmp/ghcr-response.json -w "%{http_code}" \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/users/$OWNER/packages/container/jelenoid/versions?per_page=100" \
-            | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          for v in data:
-              for t in v.get('metadata', {}).get('container', {}).get('tags', []):
-                  print(t)
+            "https://api.github.com/users/$OWNER/packages/container/jelenoid/versions?per_page=100")
+          echo "API response code: $HTTP_CODE"
+          if [ "$HTTP_CODE" = "404" ]; then
+            echo "Package jelenoid does not exist yet (first push). No existing tags."
+            TAGS=""
+          else
+            TAGS=$(python3 -c "
+          import json
+          try:
+              with open('/tmp/ghcr-response.json') as f:
+                  data = json.load(f)
+              for v in data:
+                  for t in v.get('metadata', {}).get('container', {}).get('tags', []):
+                      print(t)
+          except Exception as e:
+              print(f'::warning::failed to parse response: {e}', file=__import__('sys').stderr)
           ")
-          echo "Existing tags:"
-          echo "$TAGS" | sed 's/^/  /'
-          TAG="chrome-$VERSION"
+            echo "Existing tags:"
+            echo "$TAGS" | sed 's/^/  /'
+          fi
           if echo "$TAGS" | grep -Fxq "$TAG"; then
             echo "Tag $TAG already exists in GHCR."
             echo "exists=true" >> "$GITHUB_OUTPUT"
