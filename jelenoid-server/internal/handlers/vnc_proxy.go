@@ -12,15 +12,17 @@ import (
 
 type VncProxyHandler struct {
 	activeSessions *services.ActiveSessionsService
+	upgrader       websocket.Upgrader
 }
 
 func NewVncProxyHandler(activeSessions *services.ActiveSessionsService) *VncProxyHandler {
-	return &VncProxyHandler{activeSessions: activeSessions}
-}
-
-var vncUpgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
-	Subprotocols: []string{"binary"},
+	return &VncProxyHandler{
+		activeSessions: activeSessions,
+		upgrader: websocket.Upgrader{
+			CheckOrigin:  func(r *http.Request) bool { return true },
+			Subprotocols: []string{"binary"},
+		},
+	}
 }
 
 var vncBufPool = sync.Pool{
@@ -43,7 +45,7 @@ func (h *VncProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clientConn, err := vncUpgrader.Upgrade(w, r, nil)
+	clientConn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}

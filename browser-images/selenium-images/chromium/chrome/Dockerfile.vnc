@@ -1,0 +1,84 @@
+# Chrome с VNC для Jelenoid/Selenoid. Наследует базовый образ и добавляет
+# X-стек (Xvfb, openbox, x11vnc). VNC на 5900, пароль "selenoid" по умолчанию.
+# Версия Chrome: см. комментарий в Dockerfile (без -vnc).
+
+# ---- chrome-downloader: тот же, что в headless -------------------------
+FROM jelenoid/selenium-base:bookworm AS chrome-downloader
+ARG TARGETARCH=amd64
+ARG CHROME_VERSION=latest-stable
+ARG CHROME_VERSION_JSON_URL=https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json
+
+USER root
+COPY --from=jelenoid/selenium-base:bookworm /usr/local/share/jelenoid/get-latest-chrome.sh /tmp/get-latest-chrome.sh
+RUN set -eux; \
+    chmod +x /tmp/get-latest-chrome.sh; \
+    if [ "${CHROME_VERSION}" = "latest-stable" ]; then \
+        eval "$(CHROME_VERSION_JSON_URL=${CHROME_VERSION_JSON_URL} /tmp/get-latest-chrome.sh)"; \
+    else \
+        case "${TARGETARCH}" in \
+            amd64) PLATFORM=linux64 ;; \
+            arm64) PLATFORM=linux-arm64 ;; \
+            *) echo "Unsupported arch: ${TARGETARCH}"; exit 1 ;; \
+        esac; \
+        CHROME_URL="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/${PLATFORM}/chrome-linux64.zip"; \
+        CHROMEDRIVER_URL="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/${PLATFORM}/chromedriver-linux64.zip"; \
+    fi; \
+    mkdir -p /opt/chrome /opt/chromedriver; \
+    curl -fsSL -o /tmp/chrome.zip "${CHROME_URL}"; \
+    curl -fsSL -o /tmp/driver.zip "${CHROMEDRIVER_URL}"; \
+    unzip -q /tmp/chrome.zip -d /opt/chrome; \
+    unzip -q /tmp/driver.zip -d /opt/chromedriver; \
+    rm /tmp/chrome.zip /tmp/driver.zip
+
+# ---- final --------------------------------------------------------------
+FROM jelenoid/selenium-base:bookworm
+ARG CHROME_VERSION=latest-stable
+
+LABEL org.opencontainers.image.title="jelenoid-chrome-selenium-vnc" \
+      org.opencontainers.image.description="Chrome + ChromeDriver with VNC for Jelenoid/Selenoid" \
+      org.opencontainers.image.source="https://github.com/balakshievas/jelenoid" \
+      org.opencontainers.image.licenses="GPL-3.0"
+
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        openbox \
+        x11-utils \
+        x11vnc \
+        xvfb \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /tmp/.X11-unix \
+    && chmod 1777 /tmp/.X11-unix
+USER jelenoid
+
+ENV CHROME_BIN=/opt/chrome/chrome-linux64/chrome \
+    CHROMEDRIVER_BIN=/opt/chromedriver/chromedriver-linux64/chromedriver \
+    CHROMEDRIVER_PORT=4444 \
+    CHROMEDRIVER_URL_BASE=/wd/hub \
+    SE_SCREEN_WIDTH=1920 \
+    SE_SCREEN_HEIGHT=1080 \
+    SE_SCREEN_DEPTH=24 \
+    SE_VNC_PORT=5900 \
+    DISPLAY=:99 \
+    DISPLAY_NUM=99
+
+COPY --from=chrome-downloader --chown=jelenoid:jelenoid /opt/chrome /opt/chrome
+COPY --from=chrome-downloader --chown=jelenoid:jelenoid /opt/chromedriver /opt/chromedriver
+COPY --chown=root:root --chmod=755 supervisord-vnc.conf /etc/supervisor/supervisord.conf
+COPY --chown=root:root --chmod=755 entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY --chown=root:root --chmod=755 openbox-autostart /etc/xdg/openbox/autostart
+
+USER root
+RUN ln -sf "${CHROME_BIN}" /usr/local/bin/google-chrome \
+    && ln -sf "${CHROMEDRIVER_BIN}" /usr/local/bin/chromedriver
+USER jelenoid
+
+EXPOSE 4444 5900
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=5 \
+    CMD curl -fsS http://127.0.0.1:4444/wd/hub/status | grep -q '"ready":true' || exit 1
+
+WORKDIR /home/jelenoid
+
+ENTRYPOINT ["dumb-init", "--", "/usr/local/bin/entrypoint.sh"]
+CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf", "-n"]
