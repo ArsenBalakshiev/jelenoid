@@ -24,7 +24,6 @@ permissions:
 
 jobs:
   build-chrome:
-    # Use a self-hosted runner that has docker access
     runs-on: [self-hosted, jelenoid-runner]
     timeout-minutes: 60
 
@@ -37,80 +36,67 @@ jobs:
 
       - name: Resolve target version
         id: resolve
-        shell: pwsh
         run: |
-          $jsonUrl = "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json"
-          $pinned = "${{ inputs.version }}"
-          if ($pinned) {
-            "version=$pinned" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-            Write-Host "Using pinned version: $pinned"
-          } else {
-            $data = Invoke-RestMethod -Uri $jsonUrl
-            $v = $data.channels.Stable.version
-            "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-            Write-Host "Latest stable: $v"
-          }
+          set -eu
+          JSON_URL="https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json"
+          PINNED="${{ inputs.version }}"
+          if [ -n "$PINNED" ]; then
+            VERSION="$PINNED"
+            echo "Using pinned version: $VERSION"
+          else
+            echo "Fetching latest stable from $JSON_URL"
+            VERSION=$(curl -fsSL "$JSON_URL" | python3 -c "import json,sys; print(json.load(sys.stdin)['channels']['Stable']['version'])")
+            echo "Latest stable: $VERSION"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Check if version already exists in GHCR
         id: check
-        shell: pwsh
         run: |
-          $version = "${{ steps.resolve.outputs.version }}"
-          $owner = "${{ github.repository_owner }}"
-          # In GHCR, `ghcr.io/<owner>/jelenoid:chrome-150.0.x` is one package
+          set -eu
+          VERSION="${{ steps.resolve.outputs.version }}"
+          OWNER="${{ github.repository_owner }}"
+          # In GHCR, ghcr.io/<owner>/jelenoid:chrome-150.0.x is one package
           # (`jelenoid`) with a tag `chrome-150.0.x`. So we list versions of
           # the `jelenoid` package and look for our tag.
-          $apiUrl = "https://api.github.com/users/$owner/packages/container/jelenoid/versions?per_page=100"
-
-          Write-Host "Listing existing tags from $apiUrl"
-          $headers = @{ Authorization = "Bearer ${{ secrets.GITHUB_TOKEN }}"; Accept = "application/vnd.github+json" }
-          $existing = @()
-          $url = $apiUrl
-          while ($url) {
-            $resp = Invoke-RestMethod -Uri $url -Headers $headers
-            foreach ($v in $resp) {
-              foreach ($t in $v.metadata.container.tags) { $existing += $t }
-            }
-            $url = $null
-            if ($resp.Length -eq 100) {
-              $url = $apiUrl + "&page=2"
-            }
-          }
-          Write-Host "Existing tags: $($existing -join ', ')"
-          $tag = "chrome-$version"
-          $exists = $existing -contains $tag
-          $force = [bool]::Parse("${{ inputs.force }}")
-          if ($exists -and -not $force) {
-            Write-Host "Tag $tag already exists in GHCR. Skipping build."
-            "exists=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          } else {
-            Write-Host "Tag $tag not in GHCR (or force=true). Will build."
-            "exists=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          }
+          echo "Listing existing tags for ghcr.io/$OWNER/jelenoid"
+          TAGS=$(curl -fsSL \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/users/$OWNER/packages/container/jelenoid/versions?per_page=100" \
+            | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          for v in data:
+              for t in v.get('metadata', {}).get('container', {}).get('tags', []):
+                  print(t)
+          ")
+          echo "Existing tags:"
+          echo "$TAGS" | sed 's/^/  /'
+          TAG="chrome-$VERSION"
+          if echo "$TAGS" | grep -Fxq "$TAG"; then
+            echo "Tag $TAG already exists in GHCR."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Tag $TAG not in GHCR. Will build."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build and push
         if: steps.check.outputs.exists == 'false'
-        shell: pwsh
         run: |
-          $version = "${{ steps.resolve.outputs.version }}"
-          $owner = "${{ github.repository_owner }}"
-          Set-Location browser-images/selenium-images/chromium/chrome
-          python build.py --registry "ghcr.io/$owner" --push --version $version
-          if ($LASTEXITCODE -ne 0) { throw "build failed" }
-        env:
-          # GITHUB_TOKEN is auto-injected by Actions, but we need it for the
-          # sub-process python script's docker push auth
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          set -eu
+          cd browser-images/selenium-images/chromium/chrome
+          python3 build.py --registry "ghcr.io/${{ github.repository_owner }}" --push --version "${{ steps.resolve.outputs.version }}"
 
       - name: Summary
         if: always()
-        shell: pwsh
         run: |
-          $version = "${{ steps.resolve.outputs.version }}"
-          $existed = "${{ steps.check.outputs.exists }}"
-          $owner = "${{ github.repository_owner }}"
-          if ($existed -eq "true") {
-            Write-Host "::notice title=Up to date::ghcr.io/$owner/jelenoid/chrome-$version already published. Nothing to do."
-          } else {
-            Write-Host "::notice title=Built::ghcr.io/$owner/jelenoid/chrome-$version published."
-          }
+          VERSION="${{ steps.resolve.outputs.version }}"
+          EXISTED="${{ steps.check.outputs.exists }}"
+          OWNER="${{ github.repository_owner }}"
+          if [ "$EXISTED" = "true" ]; then
+            echo "::notice title=Up to date::ghcr.io/$OWNER/jelenoid:chrome-$VERSION already published. Nothing to do."
+          else
+            echo "::notice title=Built::ghcr.io/$OWNER/jelenoid:chrome-$VERSION published."
+          fi
