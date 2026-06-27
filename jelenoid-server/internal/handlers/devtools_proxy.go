@@ -10,14 +10,16 @@ import (
 
 type DevToolsProxyHandler struct {
 	activeSessions *services.ActiveSessionsService
+	upgrader       websocket.Upgrader
 }
 
 func NewDevToolsProxyHandler(activeSessions *services.ActiveSessionsService) *DevToolsProxyHandler {
-	return &DevToolsProxyHandler{activeSessions: activeSessions}
-}
-
-var devtoolsUpgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
+	return &DevToolsProxyHandler{
+		activeSessions: activeSessions,
+		upgrader: websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool { return true },
+		},
+	}
 }
 
 func (h *DevToolsProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -40,7 +42,7 @@ func (h *DevToolsProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 
 	targetURL := fmt.Sprintf("ws://%s:7070/devtools/page/%s", session.ContainerInfo.ContainerName, session.RemoteSessionID)
 
-	clientConn, err := devtoolsUpgrader.Upgrade(w, r, nil)
+	clientConn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}

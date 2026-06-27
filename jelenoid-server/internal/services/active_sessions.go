@@ -95,12 +95,16 @@ func (s *ActiveSessionsService) IsQueueEnabled() bool {
 }
 
 func (s *ActiveSessionsService) TryReserveSlot() bool {
-	current := s.seleniumInProgress.Add(1)
-	if int(current) > s.seleniumSessionLimit {
-		s.seleniumInProgress.Add(-1)
-		return false
+	limit := int32(s.seleniumSessionLimit)
+	for {
+		old := s.seleniumInProgress.Load()
+		if old >= limit {
+			return false
+		}
+		if s.seleniumInProgress.CompareAndSwap(old, old+1) {
+			return true
+		}
 	}
-	return true
 }
 
 func (s *ActiveSessionsService) ReleaseSlot() {

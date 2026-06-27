@@ -7,6 +7,9 @@
       },
       "138": {
         "image": "twilio/selenoid:chrome_stable_138"
+      },
+      "150": {
+        "image": "suomessa/jelenoid:chrome-150.0.7871.24-vnc"
       }
     }
   },

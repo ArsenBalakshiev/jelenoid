@@ -1,0 +1,369 @@
+#!/usr/bin/env python3
+"""
+Smoke-тест для Chrome-образов Jelenoid.
+
+Использование:
+    python test.py                       # headless-вариант
+    python test.py --vnc                 # VNC-вариант (Xvfb + x11vnc)
+    python test.py --skip-build          # использовать кэшированный образ chrome
+    python test.py --skip-build-base     # не пересобирать base-образ
+    python test.py --keep                # не удалять контейнер после теста
+    python test.py --chrome-version 151.0.7896.2   # конкретная версия
+    python test.py --chrome-version latest-stable  # последняя Stable с googlechromelabs
+    python test.py --http-port 24444 --vnc-port 25900
+
+Выход: 0 — OK, 1 — тест упал, 2 — неверные аргументы.
+
+Зависимости: Python 3.8+, Docker CLI в PATH, базовый образ jelenoid/selenium-base.
+"""
+from __future__ import annotations
+
+import argparse
+import base64
+import json
+import os
+import shutil
+import socket
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+BASE_DIR = SCRIPT_DIR.parent / "base"
+BASE_IMAGE = "jelenoid/selenium-base:bookworm"
+DEFAULT_CHROME_VERSION = "latest-stable"
+
+
+class C:
+    RED = "\033[31m"
+    GREEN = "\033[32m"
+    BLUE = "\033[34m"
+    RESET = "\033[0m"
+
+
+def red(s: str) -> str:
+    return f"{C.RED}{s}{C.RESET}"
+
+
+def green(s: str) -> str:
+    return f"{C.GREEN}{s}{C.RESET}"
+
+
+def blue(s: str) -> str:
+    return f"{C.BLUE}{s}{C.RESET}"
+
+
+def info(msg: str) -> None:
+    print(blue(f">>> {msg}"))
+
+
+def passed(msg: str) -> None:
+    print(green(f"PASS: {msg}"))
+
+
+def fail(msg: str) -> "None":
+    raise RuntimeError(msg)
+
+
+def check_tool(name: str) -> None:
+    if shutil.which(name) is None:
+        fail(f"{name} not found in PATH")
+
+
+def docker(args: list[str], *, check: bool = True, capture: bool = False) -> str:
+    cmd = ["docker", *args]
+    res = subprocess.run(
+        cmd,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE if capture else None,
+        stderr=subprocess.PIPE if capture else None,
+    )
+    if check and res.returncode != 0:
+        out = (res.stdout or "") + (res.stderr or "")
+        fail(f"docker {args!r} failed (exit {res.returncode}): {out.strip()}")
+    return (res.stdout or "") if capture else ""
+
+
+def wait_for_tcp(host: str, port: int, timeout: float) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.5)
+            try:
+                s.connect((host, port))
+                return
+            except OSError:
+                time.sleep(0.3)
+    fail(f"TCP {host}:{port} did not open within {timeout:.0f}s")
+
+
+def wait_for_url(url: str, timeout: float) -> str:
+    deadline = time.monotonic() + timeout
+    last_err: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=1.0) as r:
+                if r.status == 200:
+                    return r.read().decode("utf-8", errors="replace")
+        except (urllib.error.URLError, ConnectionError, OSError) as e:
+            last_err = e
+        time.sleep(0.3)
+    fail(f"URL {url} did not respond OK within {timeout:.0f}s: {last_err}")
+
+
+def http_post_json(url: str, payload: dict, timeout: float = 15.0) -> dict:
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=body,
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", errors="replace")
+        fail(f"POST {url} -> HTTP {e.code}: {detail}")
+    except urllib.error.URLError as e:
+        fail(f"POST {url} -> {e}")
+
+
+def http_delete(url: str, timeout: float = 10.0) -> None:
+    req = urllib.request.Request(url, method="DELETE")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout):
+            return
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return
+        fail(f"DELETE {url} -> HTTP {e.code}: {e.read().decode('utf-8', errors='replace')}")
+
+
+def http_get_b64(url: str, timeout: float = 10.0) -> bytes:
+    req = urllib.request.Request(url)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        return base64.b64decode(data["value"])
+    except urllib.error.URLError as e:
+        fail(f"GET {url} -> {e}")
+
+
+def run(args: argparse.Namespace) -> int:
+    is_vnc = args.vnc
+    tag = args.tag
+    if is_vnc and tag == "jelenoid-chrome:test":
+        tag = "jelenoid-chrome:test-vnc"
+    container = args.container
+    http_port = args.http_port
+    vnc_port = args.vnc_port
+    skip_build = args.skip_build
+    keep = args.keep
+    chrome_version = args.chrome_version
+
+    check_tool("docker")
+
+    def cleanup() -> None:
+        if keep:
+            info(f"container kept running: {container}")
+            return
+        subprocess.run(
+            ["docker", "rm", "-f", container],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    import atexit
+    atexit.register(cleanup)
+
+    info(f"variant: {'vnc' if is_vnc else 'headless'}, image: {tag}, chrome: {chrome_version}")
+
+    skip_build_base = getattr(args, "skip_build_base", False)
+    if not skip_build_base:
+        info(f"building base image {BASE_IMAGE} (only first time, otherwise cached)")
+        r = subprocess.run(
+            ["docker", "image", "inspect", BASE_IMAGE],
+            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        if r.returncode != 0:
+            docker(
+                [
+                    "build",
+                    "-t", BASE_IMAGE,
+                    "-f", str(BASE_DIR / "Dockerfile.base"),
+                    str(BASE_DIR),
+                ]
+            )
+    else:
+        info(f"skip-build-base: assuming {BASE_IMAGE} exists")
+        r = subprocess.run(
+            ["docker", "image", "inspect", BASE_IMAGE],
+            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        if r.returncode != 0:
+            fail(f"--skip-build-base set but {BASE_IMAGE} not present")
+
+    if not skip_build:
+        info("building chrome image (this may take a few minutes)")
+        dockerfile = "Dockerfile.vnc" if is_vnc else "Dockerfile"
+        docker(
+            [
+                "build",
+                "--build-arg", f"CHROME_VERSION={chrome_version}",
+                "-t", tag,
+                "-f", str(SCRIPT_DIR / dockerfile),
+                str(SCRIPT_DIR),
+            ]
+        )
+    else:
+        info("skip-build: using existing image")
+        r = subprocess.run(
+            ["docker", "image", "inspect", tag],
+            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        if r.returncode != 0:
+            fail(f"image {tag} not present (build it first or drop --skip-build)")
+
+    info(f"starting container {container} (http={http_port} vnc={vnc_port if is_vnc else 'n/a'})")
+    run_args = [
+        "run", "--rm", "-d",
+        "--name", container,
+        "--shm-size", "2g",
+        "-p", f"{http_port}:4444",
+    ]
+    if is_vnc:
+        run_args += ["-p", f"{vnc_port}:5900"]
+    run_args.append(tag)
+    cid = docker(run_args, capture=True).strip()
+    if not cid:
+        fail("docker run did not return container id")
+    info(f"container id: {cid[:12]}")
+
+    try:
+        info("checking chrome/chromedriver versions inside container")
+        chrome_ver = docker(["exec", container, "google-chrome", "--version"], capture=True).strip()
+        passed(f"chrome: {chrome_ver}")
+        driver_ver = docker(["exec", container, "chromedriver", "--version"], capture=True).strip()
+        passed(f"chromedriver: {driver_ver}")
+
+        info(f"waiting for TCP localhost:{http_port} (chromedriver)")
+        wait_for_tcp("127.0.0.1", http_port, timeout=20.0)
+
+        info("checking /wd/hub/status")
+        status_body = wait_for_url(f"http://127.0.0.1:{http_port}/wd/hub/status", timeout=20.0)
+        print(f"  {status_body.strip()}")
+        if '"ready":true' not in status_body:
+            fail("status did not report ready=true")
+        passed("chromedriver ready")
+
+        info("creating WebDriver session")
+        chrome_args = ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+        if not is_vnc:
+            chrome_args = ["--headless=new"] + chrome_args
+        resp = http_post_json(
+            f"http://127.0.0.1:{http_port}/wd/hub/session",
+            {
+                "capabilities": {
+                    "alwaysMatch": {
+                        "browserName": "chrome",
+                        "goog:chromeOptions": {"args": chrome_args},
+                    }
+                }
+            },
+        )
+        sid = resp.get("value", {}).get("sessionId")
+        if not sid:
+            fail(f"no sessionId in response: {resp}")
+        passed(f"session created: {sid}")
+
+        info("navigating to data: URL")
+        data_url = (
+            "data:text/html,"
+            "<body style=\"background:rgb(255,0,0);margin:0\">"
+            "<div style=\"color:white;font-size:96px;padding:40px\">JELENOID-OK</div>"
+            "</body>"
+        )
+        http_post_json(
+            f"http://127.0.0.1:{http_port}/wd/hub/session/{sid}/url",
+            {"url": data_url},
+        )
+
+        if is_vnc:
+            time.sleep(1.0)
+            info("taking screenshot through chromedriver (== VNC framebuffer)")
+            png = http_get_b64(f"http://127.0.0.1:{http_port}/wd/hub/session/{sid}/screenshot")
+            if len(png) < 1000:
+                fail(f"screenshot too small ({len(png)} bytes) — display likely empty")
+            out = SCRIPT_DIR / "last-vnc-screenshot.png"
+            out.write_bytes(png)
+            passed(f"screenshot saved: {out} ({len(png)} bytes)")
+        else:
+            info("executing script to verify JS context (headless)")
+            r = http_post_json(
+                f"http://127.0.0.1:{http_port}/wd/hub/session/{sid}/execute/sync",
+                {"script": "return 1+1", "args": []},
+            )
+            if r.get("value") != 2:
+                fail(f"JS execution did not return 2: {r}")
+            passed("JS execution returned 2")
+
+        info("closing session")
+        http_delete(f"http://127.0.0.1:{http_port}/wd/hub/session/{sid}")
+        passed("session closed")
+
+    except Exception:
+        info("dumping container logs (last 80 lines) for debugging")
+        logs = docker(["logs", "--tail", "80", container], check=False, capture=True)
+        print(logs)
+        sup_err = docker(
+            ["exec", container, "cat", "/var/log/supervisor/chromedriver.err.log"],
+            check=False, capture=True,
+        )
+        if sup_err:
+            print(red("--- chromedriver.err.log ---"))
+            print(sup_err)
+        raise
+
+    print()
+    print(green("===== ALL CHECKS PASSED ====="))
+    print(green(f"  variant:   {'vnc' if is_vnc else 'headless'}"))
+    print(green(f"  image:     {tag}"))
+    print(green(f"  http port: {http_port}"))
+    if is_vnc:
+        print(green(f"  vnc port:  {vnc_port} (password: selenoid)"))
+    return 0
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(description="Smoke-test for Jelenoid Chrome images")
+    p.add_argument("--vnc", action="store_true", help="Test the VNC variant (Xvfb + x11vnc)")
+    p.add_argument("--chrome-version", default=DEFAULT_CHROME_VERSION,
+                   help=f"Chrome version to build with, or 'latest-stable' (default: {DEFAULT_CHROME_VERSION})")
+    p.add_argument("--tag", default="jelenoid-chrome:test",
+                   help="Image tag (default: jelenoid-chrome:test, vnc → :test-vnc)")
+    p.add_argument("--container", default="jelenoid-chrome-smoke",
+                   help="Container name (default: jelenoid-chrome-smoke)")
+    p.add_argument("--http-port", type=int, default=14444,
+                   help="Host port for 4444 (default: 14444)")
+    p.add_argument("--vnc-port", type=int, default=15900,
+                   help="Host port for 5900 in vnc mode (default: 15900)")
+    p.add_argument("--skip-build", action="store_true", help="Don't rebuild the chrome image")
+    p.add_argument("--skip-build-base", action="store_true", help="Don't rebuild the base image")
+    p.add_argument("--keep", action="store_true", help="Don't remove the container after test")
+    args = p.parse_args()
+
+    try:
+        return run(args)
+    except RuntimeError as e:
+        print(red(f"FAIL: {e}"))
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,40 +1,35 @@
 # ===================================================================
-# Общие правила (ОС, IDE, Редакторы)
+# IDE and OS artifacts
 # ===================================================================
 
-# Логи IDE и файлы конфигурации
+# IDEs
 .idea/
 .vscode/
 *.iml
 *.iws
 *.ipr
 
-# Файлы операционных систем
+# OS junk
 .DS_Store
 Thumbs.db
 
-# Файлы бэкапа и временные файлы редакторов
+# Editor backups
 *~
 *.swp
 *.swo
 
 # ===================================================================
-# Правила для jelenoid-server (Java / Maven)
+# Java / Maven
 # ===================================================================
 
-# Скомпилированные файлы и артефакты сборки
-jelenoid-server/target/
-jelenoid-server/**/*.class
-jelenoid-server/**/*.jar
-jelenoid-server/**/*.war
-jelenoid-server/**/*.ear
+# Build output for any module (Java, Kotlin, Scala — anything that uses Maven/Gradle)
+**/target/
+*.class
+*.jar
+*.war
+*.ear
 
-# Лог-файлы
-*.log
-jelenoid-server/*.log
-jelenoid-server/logs/
-
-# Файлы бэкапа Maven
+# Maven runtime files
 pom.xml.tag
 pom.xml.releaseBackup
 pom.xml.versionsBackup
@@ -43,67 +38,74 @@ release.properties
 dependency-reduced-pom.xml
 buildNumber.properties
 
-# Настройки Maven Wrapper
+# Maven Wrapper (keep the actual jar)
 .mvn/timing.properties
-# Важно: сам maven-wrapper.jar часто добавляют в git, чтобы проект был самодостаточным.
-# Если вы хотите его игнорировать, раскомментируйте строку ниже.
 !.mvn/wrapper/maven-wrapper.jar
 
-# Логи креша виртуальной машины Java
+# JVM crash logs
 hs_err_pid*
 
 # ===================================================================
-# Правила для jelenoid-ui (Node.js / Vite / React)
+# Go
 # ===================================================================
 
-# Зависимости
-jelenoid-ui/node_modules/
+# Compiled binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 
-# Файлы сборки (Vite по умолчанию собирает в 'dist')
+# Test binaries
+*.test
+*.out
+
+# Go workspace files (uncomment if used)
+# go.work
+# go.work.sum
+
+# ===================================================================
+# Node.js / Vite / React (jelenoid-ui)
+# ===================================================================
+
+# Dependencies
+jelenoid-ui/node_modules/
+test-app/node_modules/
+
+# Build output
 jelenoid-ui/dist/
 jelenoid-ui/.vite/
 
-# Логи
+# npm / yarn / pnpm debug logs
 jelenoid-ui/npm-debug.log*
 jelenoid-ui/yarn-debug.log*
 jelenoid-ui/yarn-error.log*
 jelenoid-ui/pnpm-debug.log*
 
-# Секретные файлы и переменные окружения
-# Никогда не добавляйте их в Git!
+# ===================================================================
+# Logs
+# ===================================================================
+
+*.log
+logs/
+
+# ===================================================================
+# Local secrets and config
+# ===================================================================
+
+# Local environment overrides (do NOT commit)
 .env
 .env.local
 .env.*.local
 
-# Кеш и временные файлы
+# Any secret-bearing files
+secrets/
+*.secret
+
+# ===================================================================
+# Tool caches
+# ===================================================================
+
 .eslintcache
 .stylelintcache
 .prettiercache
-
-# ===================================================================
-# Секретные файлы (Общее)
-# ===================================================================
-# Файлы с секретами, которые могут появиться в будущем
-secrets/
-*.json.secret
-/service-metrics/target/
-
-tests/target/
-
-container-manager/target/
-container-manager/tmp/
-/build
-/browser-config/
-/target/
-
-*.exe
-
-/test-app/node_modules
-
-jelenoid-server-java/target/
-
-container-manager/go.sum
-
-jelenoid-server/jelenoid-server-test
-jelenoid-server/browsers.json
-
