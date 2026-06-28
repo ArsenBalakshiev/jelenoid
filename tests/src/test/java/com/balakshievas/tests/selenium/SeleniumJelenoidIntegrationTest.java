@@ -7,7 +7,7 @@ import org.openqa.selenium.*;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.devtools.DevTools;
 import org.openqa.selenium.devtools.HasDevTools;
-import org.openqa.selenium.devtools.v133.network.Network;
+import org.openqa.selenium.devtools.v149.network.Network;
 import org.openqa.selenium.remote.Augmenter;
 import org.openqa.selenium.remote.LocalFileDetector;
 import org.openqa.selenium.remote.RemoteWebDriver;
@@ -45,7 +45,7 @@ class SeleniumJelenoidIntegrationTest extends BaseSeleniumJelenoidTest {
             devTools.createSession();
 
             // Включаем Runtime, чтобы ловить события консоли через WebSocket
-            devTools.send(org.openqa.selenium.devtools.v133.runtime.Runtime.enable());
+            devTools.send(org.openqa.selenium.devtools.v149.runtime.Runtime.enable());
 
             // Выполняем JS-скрипт, который выведет строку размером 1 МБ в консоль.
             // Браузер попытается отправить эту огромную строку по CDP-сокету (DevTools).
@@ -62,7 +62,7 @@ class SeleniumJelenoidIntegrationTest extends BaseSeleniumJelenoidTest {
 
             // Пытаемся сделать еще один вызов DevTools. 
             // Он должен упасть, если сокет был закрыт с ошибкой 1009.
-            devTools.send(org.openqa.selenium.devtools.v133.runtime.Runtime.disable());
+            devTools.send(org.openqa.selenium.devtools.v149.runtime.Runtime.disable());
             
         } else {
             Assertions.fail("Драйвер не поддерживает DevTools. Проверьте Augmenter.");

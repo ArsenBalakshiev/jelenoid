@@ -1,7 +1,7 @@
 # Базовый образ для всех браузеров Selenium (Chrome, Firefox, Yandex, Opera, ...).
-# Содержит: системные библиотеки (X11 + GTK + шрифты), supervisord, socat,
-# dumb-init, non-root user. Никакого браузера тут нет — он добавляется в
-# наследниках (chrome/, firefox/, ...).
+# Содержит: системные библиотеки (X11 + GTK + шрифты), dumb-init, non-root
+# user. Никакого браузера тут нет — он добавляется в наследниках
+# (chrome/, firefox/, ...).
 
 FROM debian:bookworm-slim
 
@@ -51,24 +51,14 @@ RUN apt-get update \
         libxrender1 \
         libxshmfence1 \
         libxtst6 \
-        procps \
         python3 \
-        socat \
-        supervisor \
         unzip \
     && rm -rf /var/lib/apt/lists/* \
     && chmod +x /usr/local/share/jelenoid/get-latest-chrome.sh \
     && groupadd -r jelenoid -g ${GID} \
     && useradd -r -g jelenoid -u ${UID} -d /home/jelenoid -m -s /sbin/nologin jelenoid \
-    && mkdir -p \
-        /var/log/supervisor \
-        /var/run/supervisor \
-        /home/jelenoid/.config \
-        /home/jelenoid/Downloads \
-    && chown -R jelenoid:jelenoid \
-        /home/jelenoid \
-        /var/log/supervisor \
-        /var/run/supervisor
+    && mkdir -p /home/jelenoid/Downloads \
+    && chown -R jelenoid:jelenoid /home/jelenoid
 
 USER jelenoid
 WORKDIR /home/jelenoid

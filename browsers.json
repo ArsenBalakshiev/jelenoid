@@ -1,6 +1,6 @@
 {
   "chrome": {
-    "default": "133",
+    "default": "150",
     "versions": {
       "133": {
         "image": "twilio/selenoid:chrome_stable_133"

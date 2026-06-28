@@ -61,22 +61,29 @@ func (m *Manager) StartSelenium(ctx context.Context, image string, isVncEnabled 
 }
 
 func (m *Manager) waitForSeleniumReady(containerIpAddress string) error {
-	statusUrl := fmt.Sprintf("http://%s:4444/status", containerIpAddress)
+	// Поддерживаем оба пути: /status (Selenoid-совместимые образы) и
+	// /wd/hub/status (наши старые образы и legacy container-manager).
+	statusUrls := []string{
+		fmt.Sprintf("http://%s:4444/status", containerIpAddress),
+		fmt.Sprintf("http://%s:4444/wd/hub/status", containerIpAddress),
+	}
 	deadline := time.Now().Add(m.Config.StartingTimeout)
 
 	client := &http.Client{Timeout: 2 * time.Second}
 
 	for time.Now().Before(deadline) {
-		resp, err := client.Get(statusUrl)
-		if err == nil {
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			if resp.StatusCode >= 200 && resp.StatusCode < 300 && strings.Contains(string(body), `"ready":true`) {
-				time.Sleep(500 * time.Millisecond) // Tactical delay
-				return nil
+		for _, statusUrl := range statusUrls {
+			resp, err := client.Get(statusUrl)
+			if err == nil {
+				body, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if resp.StatusCode >= 200 && resp.StatusCode < 300 && strings.Contains(string(body), `"ready":true`) {
+					time.Sleep(100 * time.Millisecond) // Tactical delay
+					return nil
+				}
 			}
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(100 * time.Millisecond)
 	}
 	return fmt.Errorf("container %s did not become ready in time", containerIpAddress)
 }

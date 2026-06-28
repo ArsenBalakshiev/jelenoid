@@ -6,7 +6,7 @@ import org.openqa.selenium.*;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.devtools.DevTools;
 import org.openqa.selenium.devtools.HasDevTools;
-import org.openqa.selenium.devtools.v133.network.Network;
+import org.openqa.selenium.devtools.v149.network.Network;
 import org.openqa.selenium.interactions.Actions;
 import org.openqa.selenium.remote.Augmenter;
 import org.openqa.selenium.support.ui.ExpectedConditions;
@@ -239,7 +239,7 @@ class SeleniumE2ETest extends BaseSeleniumJelenoidTest {
         if (driver instanceof HasDevTools hasDevTools) {
             DevTools devTools = hasDevTools.getDevTools();
             devTools.createSession();
-            devTools.send(org.openqa.selenium.devtools.v133.runtime.Runtime.enable());
+            devTools.send(org.openqa.selenium.devtools.v149.runtime.Runtime.enable());
 
             driver.get(TEST_APP_BASE + "/");
 
