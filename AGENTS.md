@@ -118,7 +118,7 @@ main.go                       ← http.ServeMux + /health
 config/config.go              ← env (Port, DockerNetwork, ShmSize, Tmpfs, таймауты)
 api/handlers.go               ← HTTP-хендлеры + SSE-обёртка SseWriter
 docker/base.go                ← Manager: NewClientWithOpts, StopContainer, ImageExists, WaitForPort, CopyFileToContainer (zip→tar, защита от zip-bomb 50MB)
-docker/selenium.go            ← StartSelenium: имя `jelenoid-session-<uuid>`, network=jelenoid-net, shm, /tmp tmpfs, ждёт http://container:4444/status {"ready":true}
+  docker/selenium.go            ← StartSelenium: имя `jelenoid-session-<uuid>`, network=jelenoid-net, shm, /tmp tmpfs, ждёт http://container:4444/status или /wd/hub/status {"ready":true}
 docker/playwright.go          ← StartPlaywright: имя `jelenoid-playwright-<uuid[:8]>`, Init, IpcMode=host, CapAdd=SYS_ADMIN, shm, /tmp tmpfs, cmd: `npx -y playwright@<ver> run-server --port 3000 --host 0.0.0.0`, ждёт TCP :3000
 models/models.go              ← ContainerInfo (те же поля, что в jelenoid-server/dto)
 go.mod                        ← module github.com/balakshievas/Jelenoid/container-manager
@@ -353,7 +353,7 @@ Content-Type: application/json
   }
 }
 ```
-Возвращает `value.sessionId` — это **hubSessionId**, не remote. Используй его в `DELETE /wd/hub/session/{hubSessionId}` и в `/wd/hub/session/{hubSessionId}/...`. Любые `…/{remoteId}/...` хаб автоматически транслирует (см. `selenium_session.go:229-249`).
+Возвращает `value.sessionId` — это **hubSessionId**, не remote. Используй его в `DELETE /wd/hub/session/{hubSessionId}` и в `/wd/hub/session/{hubSessionId}/...`. Хаб транслирует запросы в контейнер по пути `/wd/hub/session/{remoteSessionId}/...`, чтобы оставаться совместимым с Selenoid-образами (twilio/selenoid) и нашими legacy-образами.
 
 ### 10.2 Аплоад файла в контейнер
 ```http

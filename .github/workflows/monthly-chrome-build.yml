@@ -56,10 +56,11 @@ jobs:
           set -eu
           VERSION="${{ steps.resolve.outputs.version }}"
           OWNER="${{ github.repository_owner }}"
-          TAG="chrome-$VERSION"
-          # In GHCR, ghcr.io/<owner>/jelenoid:chrome-150.0.x is one package
-          # (`jelenoid`) with a tag `chrome-150.0.x`. So we list versions of
-          # the `jelenoid` package and look for our tag.
+          TAG_HEADLESS="chrome-$VERSION"
+          TAG_VNC="chrome-$VERSION-vnc"
+          # In GHCR, ghcr.io/<owner>/jelenoid:chrome-<version> is one package
+          # (`jelenoid`) with tags. We list versions of the `jelenoid` package
+          # and look for both tags.
           # 404 means the package doesn't exist yet (first push) — treat as empty tag list.
           echo "Listing existing tags for ghcr.io/$OWNER/jelenoid"
           HTTP_CODE=$(curl -s -o /tmp/ghcr-response.json -w "%{http_code}" \
@@ -85,6 +86,20 @@ jobs:
             echo "Existing tags:"
             echo "$TAGS" | sed 's/^/  /'
           fi
+          MISSING=""
+          if ! echo "$TAGS" | grep -Fxq "$TAG_HEADLESS"; then
+            MISSING="$MISSING $TAG_HEADLESS"
+          fi
+          if ! echo "$TAGS" | grep -Fxq "$TAG_VNC"; then
+            MISSING="$MISSING $TAG_VNC"
+          fi
+          if [ -z "$MISSING" ]; then
+            echo "Tags $TAG_HEADLESS and $TAG_VNC already exist in GHCR."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Missing tags:$MISSING. Will build."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
           if echo "$TAGS" | grep -Fxq "$TAG"; then
             echo "Tag $TAG already exists in GHCR."
             echo "exists=true" >> "$GITHUB_OUTPUT"
@@ -107,7 +122,7 @@ jobs:
           EXISTED="${{ steps.check.outputs.exists }}"
           OWNER="${{ github.repository_owner }}"
           if [ "$EXISTED" = "true" ]; then
-            echo "::notice title=Up to date::ghcr.io/$OWNER/jelenoid:chrome-$VERSION already published. Nothing to do."
+            echo "::notice title=Up to date::ghcr.io/$OWNER/jelenoid:chrome-$VERSION and chrome-$VERSION-vnc already published. Nothing to do."
           else
-            echo "::notice title=Built::ghcr.io/$OWNER/jelenoid:chrome-$VERSION published."
+            echo "::notice title=Built::ghcr.io/$OWNER/jelenoid:chrome-$VERSION and chrome-$VERSION-vnc published."
           fi

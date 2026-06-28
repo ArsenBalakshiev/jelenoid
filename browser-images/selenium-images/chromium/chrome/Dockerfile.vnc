@@ -1,8 +1,28 @@
 # Chrome с VNC для Jelenoid/Selenoid. Наследует базовый образ и добавляет
 # X-стек (Xvfb, openbox, x11vnc). VNC на 5900, пароль "selenoid" по умолчанию.
-# Версия Chrome: см. комментарий в Dockerfile (без -vnc).
+# Версия Chrome: см. Dockerfile (без -vnc).
+#
+# Здесь используется полноценный chrome-linux64 (не headless-shell), потому что
+# headless-shell не поддерживает отрисовку в Xvfb.
 
-# ---- chrome-downloader: тот же, что в headless -------------------------
+# ---- go builders -------------------------------------------------------
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS cdp-proxy-builder
+ARG TARGETARCH
+ARG TARGETOS=linux
+WORKDIR /src
+COPY cdp-proxy/go.mod cdp-proxy/go.sum ./
+COPY cdp-proxy/main.go ./
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /cdp-proxy .
+
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS wd-proxy-builder
+ARG TARGETARCH
+ARG TARGETOS=linux
+WORKDIR /src
+COPY wd-proxy/go.mod ./
+COPY wd-proxy/main.go ./
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /wd-proxy .
+
+# ---- chrome-downloader: парсит JSON и качает бинарники -----------------
 FROM jelenoid/selenium-base:bookworm AS chrome-downloader
 ARG TARGETARCH=amd64
 ARG CHROME_VERSION=latest-stable
@@ -20,9 +40,12 @@ RUN set -eux; \
             arm64) PLATFORM=linux-arm64 ;; \
             *) echo "Unsupported arch: ${TARGETARCH}"; exit 1 ;; \
         esac; \
-        CHROME_URL="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/${PLATFORM}/chrome-linux64.zip"; \
-        CHROMEDRIVER_URL="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/${PLATFORM}/chromedriver-linux64.zip"; \
+        CHROME_URL="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/${PLATFORM}/chrome-${PLATFORM}.zip"; \
+        CHROMEDRIVER_URL="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/${PLATFORM}/chromedriver-${PLATFORM}.zip"; \
     fi; \
+    echo "Resolving CHROME_VERSION=${CHROME_VERSION}"; \
+    echo "  CHROME_URL=${CHROME_URL}"; \
+    echo "  CHROMEDRIVER_URL=${CHROMEDRIVER_URL}"; \
     mkdir -p /opt/chrome /opt/chromedriver; \
     curl -fsSL -o /tmp/chrome.zip "${CHROME_URL}"; \
     curl -fsSL -o /tmp/driver.zip "${CHROMEDRIVER_URL}"; \
@@ -30,11 +53,11 @@ RUN set -eux; \
     unzip -q /tmp/driver.zip -d /opt/chromedriver; \
     rm /tmp/chrome.zip /tmp/driver.zip
 
-# ---- final --------------------------------------------------------------
+# ---- final -------------------------------------------------------------
 FROM jelenoid/selenium-base:bookworm
 ARG CHROME_VERSION=latest-stable
 
-LABEL org.opencontainers.image.title="jelenoid-chrome-selenium-vnc" \
+LABEL org.opencontainers.image.title="jelenoid-chrome-vnc" \
       org.opencontainers.image.description="Chrome + ChromeDriver with VNC for Jelenoid/Selenoid" \
       org.opencontainers.image.source="https://github.com/balakshievas/jelenoid" \
       org.opencontainers.image.licenses="GPL-3.0"
@@ -54,7 +77,6 @@ USER jelenoid
 ENV CHROME_BIN=/opt/chrome/chrome-linux64/chrome \
     CHROMEDRIVER_BIN=/opt/chromedriver/chromedriver-linux64/chromedriver \
     CHROMEDRIVER_PORT=4444 \
-    CHROMEDRIVER_URL_BASE=/wd/hub \
     SE_SCREEN_WIDTH=1920 \
     SE_SCREEN_HEIGHT=1080 \
     SE_SCREEN_DEPTH=24 \
@@ -62,23 +84,29 @@ ENV CHROME_BIN=/opt/chrome/chrome-linux64/chrome \
     DISPLAY=:99 \
     DISPLAY_NUM=99
 
+COPY --from=cdp-proxy-builder --chown=root:root --chmod=755 /cdp-proxy /usr/local/bin/cdp-proxy
+COPY --from=wd-proxy-builder --chown=root:root --chmod=755 /wd-proxy /usr/local/bin/wd-proxy
 COPY --from=chrome-downloader --chown=jelenoid:jelenoid /opt/chrome /opt/chrome
 COPY --from=chrome-downloader --chown=jelenoid:jelenoid /opt/chromedriver /opt/chromedriver
-COPY --chown=root:root --chmod=755 supervisord-vnc.conf /etc/supervisor/supervisord.conf
 COPY --chown=root:root --chmod=755 entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY --chown=root:root --chmod=755 start-vnc.sh /usr/local/bin/start-vnc.sh
 COPY --chown=root:root --chmod=755 openbox-autostart /etc/xdg/openbox/autostart
 
 USER root
-RUN ln -sf "${CHROME_BIN}" /usr/local/bin/google-chrome \
-    && ln -sf "${CHROMEDRIVER_BIN}" /usr/local/bin/chromedriver
+# Wrapper добавляет флаги, необходимые для запуска Chrome в Docker без прав root.
+RUN { echo '#!/bin/sh'; echo 'exec /opt/chrome/chrome-linux64/chrome --no-sandbox --disable-gpu "$@"'; } > /usr/local/bin/google-chrome \
+    && chmod 755 /usr/local/bin/google-chrome \
+    && ln -sf /opt/chromedriver/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver
+# Переопределяем CHROME_BIN, чтобы chromedriver использовал wrapper.
+ENV CHROME_BIN=/usr/local/bin/google-chrome
 USER jelenoid
 
-EXPOSE 4444 5900
+EXPOSE 4444 5900 7070
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=5 \
-    CMD curl -fsS http://127.0.0.1:4444/wd/hub/status | grep -q '"ready":true' || exit 1
+    CMD curl -fsS http://127.0.0.1:4444/status | grep -q '"ready":true' || exit 1
 
 WORKDIR /home/jelenoid
 
 ENTRYPOINT ["dumb-init", "--", "/usr/local/bin/entrypoint.sh"]
-CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf", "-n"]
+CMD ["/usr/local/bin/start-vnc.sh"]

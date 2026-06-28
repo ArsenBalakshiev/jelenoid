@@ -51,6 +51,7 @@ type SeleniumSession struct {
 	Version         string         `json:"version"`
 	VNCEnabled      bool           `json:"vncEnabled"`
 	ContainerInfo   *ContainerInfo `json:"containerInfo"`
+	DebuggerAddress string         `json:"-"`
 }
 
 func (s *SeleniumSession) UpdateActivity() {

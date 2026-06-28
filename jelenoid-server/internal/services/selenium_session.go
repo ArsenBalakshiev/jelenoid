@@ -119,7 +119,7 @@ func (s *SeleniumSessionService) createSessionInternal(requestBody map[string]in
 	enableVNC := getBoolOption(selenoidOptions, "enableVNC")
 
 	if browserInfo == nil {
-		return nil, &HTTPError{StatusCode: http.StatusNotFound, Message: "Not found images for your browser"}
+		return nil, &HTTPError{StatusCode: http.StatusNotFound, Message: "Not found browser version"}
 	}
 
 	var containerInfo *dto.ContainerInfo
@@ -164,6 +164,15 @@ func (s *SeleniumSessionService) createSessionInternal(requestBody map[string]in
 		return nil, &HTTPError{StatusCode: http.StatusInternalServerError, Message: "Container did not return a session ID"}
 	}
 
+	containerCapabilities, _ := responseValue["capabilities"].(map[string]interface{})
+	debuggerAddress := ""
+	if containerCapabilities != nil {
+		if chromeOptions, ok := containerCapabilities["goog:chromeOptions"].(map[string]interface{}); ok {
+			debuggerAddress, _ = chromeOptions["debuggerAddress"].(string)
+			delete(chromeOptions, "debuggerAddress")
+		}
+	}
+
 	hubSessionID := uuid.New().String()
 	seleniumSession := &dto.SeleniumSession{
 		HubSessionID:    hubSessionID,
@@ -172,16 +181,12 @@ func (s *SeleniumSessionService) createSessionInternal(requestBody map[string]in
 		Version:         browserInfo.Version,
 		VNCEnabled:      enableVNC,
 		ContainerInfo:   containerInfo,
+		DebuggerAddress: debuggerAddress,
 	}
 	s.activeSessions.SessionSuccessfullyCreated(hubSessionID, seleniumSession, s.newReverseProxy(seleniumSession))
 	s.dispatchStatusUpdate()
 
-	containerCapabilities, _ := responseValue["capabilities"].(map[string]interface{})
 	if containerCapabilities != nil {
-		if chromeOptions, ok := containerCapabilities["goog:chromeOptions"].(map[string]interface{}); ok {
-			delete(chromeOptions, "debuggerAddress")
-		}
-
 		effectiveHost := s.publicHost
 		if effectiveHost == "" {
 			effectiveHost = s.serverAddress

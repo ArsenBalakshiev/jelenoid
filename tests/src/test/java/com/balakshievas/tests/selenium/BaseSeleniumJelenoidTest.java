@@ -20,7 +20,7 @@ public class BaseSeleniumJelenoidTest {
 
     protected WebDriver createDriver(ChromeOptions specificOptions) throws MalformedURLException {
         ChromeOptions options = new ChromeOptions();
-        options.setBrowserVersion("133");
+        options.setBrowserVersion("150");
         options.setCapability("unhandledPromptBehavior", "accept");
 
         Map<String, Object> selenoidOptions = new HashMap<>();

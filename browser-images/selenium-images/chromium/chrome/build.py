@@ -3,12 +3,17 @@
 Сборка и публикация Chrome-образов Jelenoid.
 
 Резолвит последнюю Stable-версию Chrome с googlechromelabs и собирает
-оба варианта (headless + VNC) с тегами:
+два варианта:
 
-  suomessa/jelenoid:chrome-<version>            (headless, конкретная версия)
-  suomessa/jelenoid:chrome-latest               (headless, alias на latest stable)
-  suomessa/jelenoid:chrome-<version>-vnc        (VNC)
+  suomessa/jelenoid:chrome-<version>            (chrome-headless-shell)
+  suomessa/jelenoid:chrome-latest               (alias на latest stable)
+  suomessa/jelenoid:chrome-<version>-vnc        (полный Chrome + Xvfb + x11vnc)
   suomessa/jelenoid:chrome-latest-vnc           (VNC, alias)
+
+Оба образа совместимы с jelenoid-server / Selenoid:
+  - WebDriver endpoint на :4444 (/status, /session, /wd/hub/status, /wd/hub/session)
+  - CDP-прокси на :7070 (/devtools/page/{sessionId})
+  - VNC-вариант публикует :5900
 
 CI usage:
     python build.py              # build only, no push
@@ -93,6 +98,7 @@ def resolve_latest_stable() -> dict:
         "version": version,
         "chrome_url": url_for("chrome"),
         "chromedriver_url": url_for("chromedriver"),
+        "headless_shell_url": url_for("chrome-headless-shell"),
     }
 
 
@@ -124,13 +130,7 @@ def build_variant(variant: str, version: str, registry: str) -> list[str]:
 
     tag_versioned = f"{registry}:chrome-{version}{suffix}"
     tag_latest = f"{registry}:chrome-latest{suffix}"
-    build_tags = [tag_versioned]
-    if not suffix:
-        # `chrome-latest` is the alias; only the headless variant gets a primary "latest" tag.
-        # VNC variant gets its own `:chrome-latest-vnc`.
-        pass
-    # we always tag both versioned + latest
-    build_tags.append(tag_latest)
+    build_tags = [tag_versioned, tag_latest]
 
     info(f"building {variant} -> {', '.join(build_tags)}")
     cmd = [
@@ -207,8 +207,9 @@ def main() -> int:
             resolved = resolve_latest_stable()
             version = resolved["version"]
             info(f"latest stable: {version}")
-            info(f"  chrome:       {resolved['chrome_url']}")
-            info(f"  chromedriver: {resolved['chromedriver_url']}")
+            info(f"  chrome:              {resolved['chrome_url']}")
+            info(f"  chrome-headless-shell: {resolved['headless_shell_url']}")
+            info(f"  chromedriver:        {resolved['chromedriver_url']}")
 
         if args.dry_run:
             for v in (["headless"] if args.no_vnc else ["headless", "vnc"]):
@@ -230,10 +231,7 @@ def main() -> int:
 
         # 4. Push if requested
         if args.push:
-            # de-dup preserving order
-            seen = set()
-            unique = [t for t in all_tags if not (t in seen or seen.add(t))]
-            push_tags(unique)
+            push_tags(list(dict.fromkeys(all_tags)))
         else:
             info("skipping push (use --push to upload to registry)")
 

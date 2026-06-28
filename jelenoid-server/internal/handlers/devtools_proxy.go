@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/balakshievas/jelenoid-server-go/internal/services"
 	"github.com/gorilla/websocket"
@@ -40,7 +41,16 @@ func (h *DevToolsProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	targetURL := fmt.Sprintf("ws://%s:7070/devtools/page/%s", session.ContainerInfo.ContainerName, session.RemoteSessionID)
+	if session.DebuggerAddress == "" {
+		http.Error(w, "Debugger address not available for session", http.StatusNotFound)
+		return
+	}
+
+	targetURL := fmt.Sprintf("ws://%s:7070/devtools/page/%s?debuggerAddress=%s",
+		session.ContainerInfo.ContainerName,
+		session.RemoteSessionID,
+		session.DebuggerAddress,
+	)
 
 	clientConn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -54,10 +64,11 @@ func (h *DevToolsProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	}
 	defer containerConn.Close()
 
-	done := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(2)
 
 	go func() {
-		defer close(done)
+		defer wg.Done()
 		for {
 			messageType, message, err := containerConn.ReadMessage()
 			if err != nil {
@@ -69,16 +80,18 @@ func (h *DevToolsProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		}
 	}()
 
-	for {
-		messageType, message, err := clientConn.ReadMessage()
-		if err != nil {
-			break
+	go func() {
+		defer wg.Done()
+		for {
+			messageType, message, err := clientConn.ReadMessage()
+			if err != nil {
+				return
+			}
+			if err := containerConn.WriteMessage(messageType, message); err != nil {
+				return
+			}
 		}
-		if err := containerConn.WriteMessage(messageType, message); err != nil {
-			break
-		}
-	}
-	containerConn.WriteMessage(websocket.CloseMessage,
-		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-	<-done
+	}()
+
+	wg.Wait()
 }

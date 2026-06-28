@@ -1,8 +1,8 @@
 FROM golang:1.24-alpine AS builder
 WORKDIR /build
 
-COPY go.mod go.sum ./
-RUN go mod download
+COPY go.mod ./
+RUN go mod download all
 
 COPY . .
 RUN CGO_ENABLED=0 go build -o jelenoid-server ./cmd/server

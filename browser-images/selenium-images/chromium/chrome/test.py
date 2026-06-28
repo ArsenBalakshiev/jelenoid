@@ -3,14 +3,14 @@
 Smoke-тест для Chrome-образов Jelenoid.
 
 Использование:
-    python test.py                       # headless-вариант
-    python test.py --vnc                 # VNC-вариант (Xvfb + x11vnc)
+    python test.py                       # headless-вариант (chrome-headless-shell)
+    python test.py --vnc                 # VNC-вариант (полный Chrome + Xvfb + x11vnc)
     python test.py --skip-build          # использовать кэшированный образ chrome
     python test.py --skip-build-base     # не пересобирать base-образ
     python test.py --keep                # не удалять контейнер после теста
     python test.py --chrome-version 151.0.7896.2   # конкретная версия
     python test.py --chrome-version latest-stable  # последняя Stable с googlechromelabs
-    python test.py --http-port 24444 --vnc-port 25900
+    python test.py --http-port 24444 --cdp-port 27070 --vnc-port 25900
 
 Выход: 0 — OK, 1 — тест упал, 2 — неверные аргументы.
 
@@ -19,9 +19,9 @@ Smoke-тест для Chrome-образов Jelenoid.
 from __future__ import annotations
 
 import argparse
+import atexit
 import base64
 import json
-import os
 import shutil
 import socket
 import subprocess
@@ -41,6 +41,7 @@ class C:
     RED = "\033[31m"
     GREEN = "\033[32m"
     BLUE = "\033[34m"
+    YELLOW = "\033[33m"
     RESET = "\033[0m"
 
 
@@ -56,12 +57,20 @@ def blue(s: str) -> str:
     return f"{C.BLUE}{s}{C.RESET}"
 
 
+def yellow(s: str) -> str:
+    return f"{C.YELLOW}{s}{C.RESET}"
+
+
 def info(msg: str) -> None:
     print(blue(f">>> {msg}"))
 
 
 def passed(msg: str) -> None:
     print(green(f"PASS: {msg}"))
+
+
+def warn(msg: str) -> None:
+    print(yellow(f"WARN: {msg}"))
 
 
 def fail(msg: str) -> "None":
@@ -88,6 +97,13 @@ def docker(args: list[str], *, check: bool = True, capture: bool = False) -> str
     return (res.stdout or "") if capture else ""
 
 
+def image_exists(image: str) -> bool:
+    return subprocess.run(
+        ["docker", "image", "inspect", image],
+        check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    ).returncode == 0
+
+
 def wait_for_tcp(host: str, port: int, timeout: float) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -101,14 +117,16 @@ def wait_for_tcp(host: str, port: int, timeout: float) -> None:
     fail(f"TCP {host}:{port} did not open within {timeout:.0f}s")
 
 
-def wait_for_url(url: str, timeout: float) -> str:
+def wait_for_url(url: str, timeout: float, expected_substring: str | None = None) -> str:
     deadline = time.monotonic() + timeout
     last_err: Exception | None = None
     while time.monotonic() < deadline:
         try:
             with urllib.request.urlopen(url, timeout=1.0) as r:
                 if r.status == 200:
-                    return r.read().decode("utf-8", errors="replace")
+                    body = r.read().decode("utf-8", errors="replace")
+                    if expected_substring is None or expected_substring in body:
+                        return body
         except (urllib.error.URLError, ConnectionError, OSError) as e:
             last_err = e
         time.sleep(0.3)
@@ -161,15 +179,15 @@ def run(args: argparse.Namespace) -> int:
         tag = "jelenoid-chrome:test-vnc"
     container = args.container
     http_port = args.http_port
+    cdp_port = args.cdp_port
     vnc_port = args.vnc_port
     skip_build = args.skip_build
-    keep = args.keep
     chrome_version = args.chrome_version
 
     check_tool("docker")
 
     def cleanup() -> None:
-        if keep:
+        if args.keep:
             info(f"container kept running: {container}")
             return
         subprocess.run(
@@ -179,37 +197,30 @@ def run(args: argparse.Namespace) -> int:
             stderr=subprocess.DEVNULL,
         )
 
-    import atexit
     atexit.register(cleanup)
 
     info(f"variant: {'vnc' if is_vnc else 'headless'}, image: {tag}, chrome: {chrome_version}")
 
-    skip_build_base = getattr(args, "skip_build_base", False)
-    if not skip_build_base:
-        info(f"building base image {BASE_IMAGE} (only first time, otherwise cached)")
-        r = subprocess.run(
-            ["docker", "image", "inspect", BASE_IMAGE],
-            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-        if r.returncode != 0:
-            docker(
-                [
-                    "build",
-                    "-t", BASE_IMAGE,
-                    "-f", str(BASE_DIR / "Dockerfile.base"),
-                    str(BASE_DIR),
-                ]
-            )
-    else:
+    if args.skip_build_base:
         info(f"skip-build-base: assuming {BASE_IMAGE} exists")
-        r = subprocess.run(
-            ["docker", "image", "inspect", BASE_IMAGE],
-            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-        if r.returncode != 0:
+        if not image_exists(BASE_IMAGE):
             fail(f"--skip-build-base set but {BASE_IMAGE} not present")
+    elif not image_exists(BASE_IMAGE):
+        info(f"building base image {BASE_IMAGE}")
+        docker(
+            [
+                "build",
+                "-t", BASE_IMAGE,
+                "-f", str(BASE_DIR / "Dockerfile.base"),
+                str(BASE_DIR),
+            ]
+        )
 
-    if not skip_build:
+    if skip_build:
+        info("skip-build: using existing image")
+        if not image_exists(tag):
+            fail(f"image {tag} not present (build it first or drop --skip-build)")
+    else:
         info("building chrome image (this may take a few minutes)")
         dockerfile = "Dockerfile.vnc" if is_vnc else "Dockerfile"
         docker(
@@ -221,21 +232,14 @@ def run(args: argparse.Namespace) -> int:
                 str(SCRIPT_DIR),
             ]
         )
-    else:
-        info("skip-build: using existing image")
-        r = subprocess.run(
-            ["docker", "image", "inspect", tag],
-            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-        if r.returncode != 0:
-            fail(f"image {tag} not present (build it first or drop --skip-build)")
 
-    info(f"starting container {container} (http={http_port} vnc={vnc_port if is_vnc else 'n/a'})")
+    info(f"starting container {container} (http={http_port} cdp={cdp_port} vnc={vnc_port if is_vnc else 'n/a'})")
     run_args = [
         "run", "--rm", "-d",
         "--name", container,
         "--shm-size", "2g",
         "-p", f"{http_port}:4444",
+        "-p", f"{cdp_port}:7070",
     ]
     if is_vnc:
         run_args += ["-p", f"{vnc_port}:5900"]
@@ -255,24 +259,23 @@ def run(args: argparse.Namespace) -> int:
         info(f"waiting for TCP localhost:{http_port} (chromedriver)")
         wait_for_tcp("127.0.0.1", http_port, timeout=20.0)
 
-        info("checking /wd/hub/status")
-        status_body = wait_for_url(f"http://127.0.0.1:{http_port}/wd/hub/status", timeout=20.0)
+        info("checking /status (jelenoid-server/container-manager compatibility)")
+        status_body = wait_for_url(
+            f"http://127.0.0.1:{http_port}/status",
+            timeout=20.0,
+            expected_substring='"ready":true',
+        )
         print(f"  {status_body.strip()}")
-        if '"ready":true' not in status_body:
-            fail("status did not report ready=true")
-        passed("chromedriver ready")
+        passed("chromedriver ready via /status")
 
         info("creating WebDriver session")
-        chrome_args = ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
-        if not is_vnc:
-            chrome_args = ["--headless=new"] + chrome_args
         resp = http_post_json(
-            f"http://127.0.0.1:{http_port}/wd/hub/session",
+            f"http://127.0.0.1:{http_port}/session",
             {
                 "capabilities": {
                     "alwaysMatch": {
                         "browserName": "chrome",
-                        "goog:chromeOptions": {"args": chrome_args},
+                        "goog:chromeOptions": {"args": []},
                     }
                 }
             },
@@ -282,6 +285,29 @@ def run(args: argparse.Namespace) -> int:
             fail(f"no sessionId in response: {resp}")
         passed(f"session created: {sid}")
 
+        info("executing script to verify JS context")
+        r = http_post_json(
+            f"http://127.0.0.1:{http_port}/session/{sid}/execute/sync",
+            {"script": "return 1+1", "args": []},
+        )
+        if r.get("value") != 2:
+            fail(f"JS execution did not return 2: {r}")
+        passed("JS execution returned 2")
+
+        info("checking CDP proxy port (container:7070)")
+        wait_for_tcp("127.0.0.1", cdp_port, timeout=10.0)
+        passed(f"cdp-proxy is listening on localhost:{cdp_port}")
+
+        info("executing CDP command via chromedriver /goog/cdp/execute")
+        cdp_resp = http_post_json(
+            f"http://127.0.0.1:{http_port}/session/{sid}/goog/cdp/execute",
+            {"cmd": "Runtime.evaluate", "params": {"expression": "1+1"}},
+        )
+        cdp_value = cdp_resp.get("value", {}).get("result", {}).get("value")
+        if cdp_value != 2:
+            fail(f"CDP Runtime.evaluate did not return 2: {cdp_resp}")
+        passed("CDP command returned 2")
+
         info("navigating to data: URL")
         data_url = (
             "data:text/html,"
@@ -290,44 +316,28 @@ def run(args: argparse.Namespace) -> int:
             "</body>"
         )
         http_post_json(
-            f"http://127.0.0.1:{http_port}/wd/hub/session/{sid}/url",
+            f"http://127.0.0.1:{http_port}/session/{sid}/url",
             {"url": data_url},
         )
 
         if is_vnc:
             time.sleep(1.0)
             info("taking screenshot through chromedriver (== VNC framebuffer)")
-            png = http_get_b64(f"http://127.0.0.1:{http_port}/wd/hub/session/{sid}/screenshot")
+            png = http_get_b64(f"http://127.0.0.1:{http_port}/session/{sid}/screenshot")
             if len(png) < 1000:
                 fail(f"screenshot too small ({len(png)} bytes) — display likely empty")
             out = SCRIPT_DIR / "last-vnc-screenshot.png"
             out.write_bytes(png)
             passed(f"screenshot saved: {out} ({len(png)} bytes)")
-        else:
-            info("executing script to verify JS context (headless)")
-            r = http_post_json(
-                f"http://127.0.0.1:{http_port}/wd/hub/session/{sid}/execute/sync",
-                {"script": "return 1+1", "args": []},
-            )
-            if r.get("value") != 2:
-                fail(f"JS execution did not return 2: {r}")
-            passed("JS execution returned 2")
 
         info("closing session")
-        http_delete(f"http://127.0.0.1:{http_port}/wd/hub/session/{sid}")
+        http_delete(f"http://127.0.0.1:{http_port}/session/{sid}")
         passed("session closed")
 
     except Exception:
         info("dumping container logs (last 80 lines) for debugging")
         logs = docker(["logs", "--tail", "80", container], check=False, capture=True)
         print(logs)
-        sup_err = docker(
-            ["exec", container, "cat", "/var/log/supervisor/chromedriver.err.log"],
-            check=False, capture=True,
-        )
-        if sup_err:
-            print(red("--- chromedriver.err.log ---"))
-            print(sup_err)
         raise
 
     print()
@@ -335,6 +345,7 @@ def run(args: argparse.Namespace) -> int:
     print(green(f"  variant:   {'vnc' if is_vnc else 'headless'}"))
     print(green(f"  image:     {tag}"))
     print(green(f"  http port: {http_port}"))
+    print(green(f"  cdp port:  {cdp_port}"))
     if is_vnc:
         print(green(f"  vnc port:  {vnc_port} (password: selenoid)"))
     return 0
@@ -351,6 +362,8 @@ def main() -> int:
                    help="Container name (default: jelenoid-chrome-smoke)")
     p.add_argument("--http-port", type=int, default=14444,
                    help="Host port for 4444 (default: 14444)")
+    p.add_argument("--cdp-port", type=int, default=17070,
+                   help="Host port for 7070 (default: 17070)")
     p.add_argument("--vnc-port", type=int, default=15900,
                    help="Host port for 5900 in vnc mode (default: 15900)")
     p.add_argument("--skip-build", action="store_true", help="Don't rebuild the chrome image")
