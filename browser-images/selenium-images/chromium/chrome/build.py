@@ -175,17 +175,27 @@ def main() -> int:
     #   "<host>/<ns>/<repo>"     -> unchanged                 (e.g. ghcr.io/user/jelenoid)
     #   "<ns>/<repo>"            -> unchanged                 (Docker Hub form: user/repo)
     #   "<ns>"                   -> "<ns>/jelenoid"
+    # OCI requires all repository name parts to be lowercase, so we lowercase
+    # the namespace (e.g. "ArsenBalakshiev" -> "arsenbalakshiev"). GHCR stores
+    # case-preserving display names, but docker push enforces lowercase.
     reg = args.registry.rstrip("/")
     parts = reg.split("/")
     KNOWN_HOSTS = ("ghcr.io", "quay.io", "gcr.io", "registry.gitlab.com", "docker.io")
     if parts[0] in KNOWN_HOSTS:
-        # 1 part = host only, 2 parts = host/ns, 3 parts = host/ns/repo
         if len(parts) <= 2:
             reg = f"{reg}/jelenoid"
     else:
-        # 1 part = ns, 2 parts = ns/repo, 3 parts = registry/ns/repo (uncommon)
         if len(parts) == 1:
             reg = f"{reg}/jelenoid"
+    # OCI requires all repository name parts to be lowercase. The host
+    # (e.g. "ghcr.io") is always lowercase anyway. Lowercase everything
+    # after the host for known registries, and the whole thing for
+    # Docker-Hub-style input.
+    if parts[0] in KNOWN_HOSTS and "/" in reg:
+        host, _, rest = reg.partition("/")
+        reg = f"{host}/" + "/".join(p.lower() for p in rest.split("/"))
+    else:
+        reg = reg.lower()
     args.registry = reg
 
     try:
