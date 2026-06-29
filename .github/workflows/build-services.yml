@@ -8,7 +8,7 @@ name: Build and publish services on merge
 # (для кэша модулей) и, в случае UI, прогоняет `npm ci` с реального registry.
 on:
   push:
-    branches: [main]
+    branches: [master, main]
   workflow_dispatch:
 
 permissions:
