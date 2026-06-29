@@ -77,11 +77,17 @@ jobs:
           else
             MAJOR_MINOR="${{ steps.resolve-browser.outputs.major_minor }}"
             echo "Resolving latest YandexDriver with linux.zip for major.minor=$MAJOR_MINOR"
+            # Подвляем info() в build.py, чтобы $() поймал только URL.
             DRIVER_URL=$(python3 -c "
-          import sys
+          import io, sys
           sys.path.insert(0, '.')
           import build
-          result = build.resolve_yandexdriver('$MAJOR_MINOR', None)
+          _old = sys.stdout
+          sys.stdout = io.StringIO()
+          try:
+              result = build.resolve_yandexdriver('$MAJOR_MINOR', None)
+          finally:
+              sys.stdout = _old
           print(result['url'])
           ")
             echo "Resolved: $DRIVER_URL"
