@@ -11,10 +11,10 @@ on:
     branches: [master, main]
   workflow_dispatch:
 
-# GHCR требует lowercase repository name, а github.repository_owner
-# сохраняет регистр GitHub-логина. ArsenBalakshiev -> arsenbalakshiev.
-env:
-  OWNER: ${{ toLower(github.repository_owner) }}
+# GHCR требует lowercase. github.repository_owner сохраняет регистр
+# GitHub-логина (ArsenBalakshiev), а | lower/toLower() не работают в
+# workflow-level env у парсера. Используем setup-step с bash tr.
+# OWNER экспортится в $GITHUB_ENV и доступен во всех последующих step'ах.
 
 permissions:
   contents: read
@@ -55,6 +55,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: Export OWNER (lowercased GitHub login for OCI image tag)
+        run: |
+          echo "OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
       - name: Login to ghcr.io
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Build and push
@@ -73,6 +76,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: Export OWNER (lowercased GitHub login for OCI image tag)
+        run: |
+          echo "OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
       - name: Login to ghcr.io
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Build and push
@@ -91,6 +97,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Export OWNER (lowercased GitHub login for OCI image tag)
+        run: |
+          echo "OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
       - name: Login to ghcr.io
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Build and push

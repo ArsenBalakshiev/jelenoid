@@ -25,9 +25,9 @@ permissions:
   contents: read
   packages: write
 
-# GHCR требует lowercase; github.repository_owner сохраняет регистр.
-env:
-  OWNER: ${{ toLower(github.repository_owner) }}
+# GHCR требует lowercase. github.repository_owner сохраняет регистр,
+# а | lower/toLower() не работают в workflow-level env у парсера.
+# Используем bash tr в setup-step и экспорт в $GITHUB_ENV.
 
 jobs:
   build-yandex:
@@ -37,6 +37,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Export OWNER (lowercased GitHub login for OCI image tag)
+        run: |
+          echo "OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
 
       - name: Login to ghcr.io
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
