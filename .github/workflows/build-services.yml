@@ -11,10 +11,10 @@ on:
     branches: [master, main]
   workflow_dispatch:
 
-# GHCR требует lowercase repository name, а ${{ github.repository_owner }}
-# сохраняет регистр GitHub-логина. АрсенBalakshiev -> arsenbalakshiev.
+# GHCR требует lowercase repository name, а github.repository_owner
+# сохраняет регистр GitHub-логина. ArsenBalakshiev -> arsenbalakshiev.
 env:
-  OWNER: ${{ github.repository_owner | lower }}
+  OWNER: ${{ toLower(github.repository_owner) }}
 
 permissions:
   contents: read
