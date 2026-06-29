@@ -14,10 +14,19 @@
     }
   },
   "yandex" : {
-    "default": "133",
+    "default": "26.4.1.1110",
     "versions": {
       "133": {
-        "image": "twilio/selenoid:yandex_stable_133"
+        "image": "twilio/selenoid:yandex_stable_133",
+        "wireBrowserName": "chrome"
+      },
+      "26.4.1.1110": {
+        "image": "suomessa/jelenoid:yandex-26.4.1.1110",
+        "wireBrowserName": "chrome"
+      },
+      "26.4.1.1110-vnc": {
+        "image": "suomessa/jelenoid:yandex-26.4.1.1110-vnc",
+        "wireBrowserName": "chrome"
       }
     }
   },

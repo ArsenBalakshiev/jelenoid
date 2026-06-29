@@ -29,7 +29,7 @@ class SeleniumE2ETest extends BaseSeleniumJelenoidTest {
     @Test
     @DisplayName("E2E: Главная страница - базовая навигация")
     void shouldNavigateToHomePage() throws MalformedURLException {
-        WebDriver driver = createDriver(new ChromeOptions());
+        WebDriver driver = createDriverYandex(new ChromeOptions());
         driver.get(TEST_APP_BASE + "/");
         
         try {
@@ -42,7 +42,7 @@ class SeleniumE2ETest extends BaseSeleniumJelenoidTest {
 
     @Test
     @DisplayName("E2E: Работа с несколькими окнами")
-    void shouldHandleMultipleWindows() throws MalformedURLException, InterruptedException {
+    void shouldHandleMultipleWindows() throws MalformedURLException {
         WebDriver driver = createDriver(new ChromeOptions());
         driver.get(TEST_APP_BASE + "/");
         

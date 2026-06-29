@@ -1,0 +1,15 @@
+#!/bin/sh
+# Fast init для headless-варианта Yandex-контейнера.
+set -eu
+
+export HOME=/home/jelenoid
+export USER=jelenoid
+export YANDEX_BIN="${YANDEX_BIN:-/usr/local/bin/google-chrome}"
+export YANDEXDRIVER_BIN="${YANDEXDRIVER_BIN:-/opt/yandexdriver/yandexdriver}"
+export CDP_PROXY_DEBUGGER_BASE="${CDP_PROXY_DEBUGGER_BASE:-127.0.0.1:9222}"
+
+cd "${HOME}"
+
+"${YANDEXDRIVER_BIN}" --port=4445 --allowed-origins=* >/dev/null 2>&1 &
+/usr/local/bin/cdp-proxy >/dev/null 2>&1 &
+exec /usr/local/bin/wd-proxy

@@ -122,6 +122,15 @@ func (s *SeleniumSessionService) createSessionInternal(requestBody map[string]in
 		return nil, &HTTPError{StatusCode: http.StatusNotFound, Message: "Not found browser version"}
 	}
 
+	// Некоторые драйверы (yandexdriver) бинарно-совместимы с chromedriver, но
+	// реестровый ключ в каталоге отличается ("yandex" vs "chrome"). Хаб резолвит
+	// образ по browserName из запроса, но контейнеру нужно слать wire-имя —
+	// то, что драйвер реально ожидает. По умолчанию wire == name; переопределяется
+	// полем wireBrowserName в каталоге.
+	if browserInfo.WireBrowserName != "" && browserInfo.WireBrowserName != browserInfo.Name {
+		requestBody = rewriteBrowserName(requestBody, browserInfo.WireBrowserName)
+	}
+
 	var containerInfo *dto.ContainerInfo
 	var err error
 	containerInfo, err = s.dockerService.StartSeleniumContainer(browserInfo.DockerImageName, enableVNC)
@@ -377,6 +386,60 @@ func extractBrowserNameAndVersion(requestBody map[string]interface{}) (string, s
 func getBoolOption(options map[string]interface{}, key string) bool {
 	val, ok := options[key].(bool)
 	return ok && val
+}
+
+// rewriteBrowserName возвращает копию requestBody, в которой browserName
+// подменён на wire в трёх местах, где W3C WebDriver его ожидает:
+//   - capabilities.alwaysMatch.browserName
+//   - capabilities.firstMatch[i].browserName (для каждой альтернативы)
+//   - desiredCapabilities.browserName (legacy JSON Wire Protocol)
+//
+// Ничего не трогает, если контейнеров с этими ключами нет.
+func rewriteBrowserName(requestBody map[string]interface{}, wire string) map[string]interface{} {
+	out := make(map[string]interface{}, len(requestBody))
+	for k, v := range requestBody {
+		out[k] = v
+	}
+	if caps, ok := out["capabilities"].(map[string]interface{}); ok {
+		newCaps := make(map[string]interface{}, len(caps))
+		for k, v := range caps {
+			newCaps[k] = v
+		}
+		if am, ok := newCaps["alwaysMatch"].(map[string]interface{}); ok {
+			newAM := make(map[string]interface{}, len(am))
+			for k, v := range am {
+				newAM[k] = v
+			}
+			newAM["browserName"] = wire
+			newCaps["alwaysMatch"] = newAM
+		}
+		if fm, ok := newCaps["firstMatch"].([]interface{}); ok {
+			newFM := make([]interface{}, len(fm))
+			for i, item := range fm {
+				if fmMap, ok := item.(map[string]interface{}); ok {
+					newFMItem := make(map[string]interface{}, len(fmMap))
+					for k, v := range fmMap {
+						newFMItem[k] = v
+					}
+					newFMItem["browserName"] = wire
+					newFM[i] = newFMItem
+				} else {
+					newFM[i] = item
+				}
+			}
+			newCaps["firstMatch"] = newFM
+		}
+		out["capabilities"] = newCaps
+	}
+	if legacy, ok := out["desiredCapabilities"].(map[string]interface{}); ok {
+		newLegacy := make(map[string]interface{}, len(legacy))
+		for k, v := range legacy {
+			newLegacy[k] = v
+		}
+		newLegacy["browserName"] = wire
+		out["desiredCapabilities"] = newLegacy
+	}
+	return out
 }
 
 type HTTPError struct {

@@ -1,0 +1,161 @@
+name: Build and publish Yandex image
+
+# Аналог monthly-chrome-build.yml, но для Yandex Browser.
+# Резолвит последнюю Stable Yandex Browser из официального apt-репо и
+# подбирает YandexDriver с GitHub по правилу major.minor (логика живёт в
+# yandex/build.py и get-latest-yandex.sh). Собирает headless + VNC.
+# Запускается на день позже Chrome, чтобы не упираться в self-hosted runner.
+on:
+  schedule:
+    - cron: '0 6 2 * *'  # 2nd of every month, 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Yandex Browser deb version (например 26.4.1.1110-1). Пусто = latest stable.'
+        required: false
+        type: string
+        default: ''
+      driver-url:
+        description: 'Полный URL yandexdriver-…-linux.zip. Пусто = авто-резолв по major.minor.'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-yandex:
+    runs-on: [self-hosted, jelenoid-runner]
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to ghcr.io
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Resolve browser version
+        id: resolve-browser
+        run: |
+          set -eu
+          cd browser-images/selenium-images/chromium/yandex
+          PINNED="${{ inputs.version }}"
+          if [ -n "$PINNED" ]; then
+            echo "Using pinned browser version: $PINNED"
+            YANDEX_VERSION="$PINNED"
+            # Извлекаем browser_revision (часть до '-') и major_minor (первые две цифры).
+            YANDEX_BROWSER_REVISION=$(echo "$PINNED" | sed -E 's/^([0-9.]+).*/\1/')
+            YANDEX_MAJOR_MINOR=$(echo "$YANDEX_BROWSER_REVISION" | cut -d. -f1-2)
+          else
+            echo "Fetching latest stable from apt repo"
+            sh ./get-latest-yandex.sh > /tmp/yandex.env
+            cat /tmp/yandex.env
+            YANDEX_VERSION=$(grep '^YANDEX_VERSION=' /tmp/yandex.env | cut -d= -f2)
+            YANDEX_BROWSER_REVISION=$(grep '^YANDEX_BROWSER_REVISION=' /tmp/yandex.env | cut -d= -f2)
+            YANDEX_MAJOR_MINOR=$(grep '^YANDEX_MAJOR_MINOR=' /tmp/yandex.env | cut -d= -f2)
+          fi
+          if [ -z "$YANDEX_VERSION" ] || [ -z "$YANDEX_BROWSER_REVISION" ]; then
+            echo "ERROR: failed to resolve YANDEX_VERSION / YANDEX_BROWSER_REVISION" >&2
+            exit 1
+          fi
+          echo "version=$YANDEX_VERSION" >> "$GITHUB_OUTPUT"
+          echo "browser_revision=$YANDEX_BROWSER_REVISION" >> "$GITHUB_OUTPUT"
+          echo "major_minor=$YANDEX_MAJOR_MINOR" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve YandexDriver URL
+        id: resolve-driver
+        run: |
+          set -eu
+          cd browser-images/selenium-images/chromium/yandex
+          PINNED_URL="${{ inputs.driver-url }}"
+          if [ -n "$PINNED_URL" ]; then
+            echo "Using pinned driver URL: $PINNED_URL"
+            echo "driver_url=$PINNED_URL" >> "$GITHUB_OUTPUT"
+          else
+            MAJOR_MINOR="${{ steps.resolve-browser.outputs.major_minor }}"
+            echo "Resolving latest YandexDriver with linux.zip for major.minor=$MAJOR_MINOR"
+            DRIVER_URL=$(python3 -c "
+          import sys
+          sys.path.insert(0, '.')
+          import build
+          result = build.resolve_yandexdriver('$MAJOR_MINOR', None)
+          print(result['url'])
+          ")
+            echo "Resolved: $DRIVER_URL"
+            echo "driver_url=$DRIVER_URL" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check if version already exists in GHCR
+        id: check
+        run: |
+          set -eu
+          REVISION="${{ steps.resolve-browser.outputs.browser_revision }}"
+          OWNER="${{ github.repository_owner }}"
+          TAG_HEADLESS="yandex-$REVISION"
+          TAG_VNC="yandex-$REVISION-vnc"
+          # ghcr.io/<owner>/jelenoid - один пакет, проверяем оба тега через versions API.
+          # 404 = пакета ещё нет, считаем что тегов тоже нет.
+          echo "Listing existing tags for ghcr.io/$OWNER/jelenoid"
+          HTTP_CODE=$(curl -s -o /tmp/ghcr-response.json -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/users/$OWNER/packages/container/jelenoid/versions?per_page=100")
+          echo "API response code: $HTTP_CODE"
+          if [ "$HTTP_CODE" = "404" ]; then
+            echo "Package jelenoid does not exist yet (first push). No existing tags."
+            TAGS=""
+          else
+            TAGS=$(python3 -c "
+          import json
+          try:
+              with open('/tmp/ghcr-response.json') as f:
+                  data = json.load(f)
+              for v in data:
+                  for t in v.get('metadata', {}).get('container', {}).get('tags', []):
+                      print(t)
+          except Exception as e:
+              print(f'::warning::failed to parse response: {e}', file=__import__('sys').stderr)
+          ")
+            echo "Existing tags:"
+            echo "$TAGS" | sed 's/^/  /'
+          fi
+          MISSING=""
+          if ! echo "$TAGS" | grep -Fxq "$TAG_HEADLESS"; then
+            MISSING="$MISSING $TAG_HEADLESS"
+          fi
+          if ! echo "$TAGS" | grep -Fxq "$TAG_VNC"; then
+            MISSING="$MISSING $TAG_VNC"
+          fi
+          if [ -z "$MISSING" ]; then
+            echo "Tags $TAG_HEADLESS and $TAG_VNC already exist in GHCR."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Missing tags:$MISSING. Will build."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          set -eu
+          cd browser-images/selenium-images/chromium/yandex
+          python3 build.py \
+            --registry "ghcr.io/${{ github.repository_owner }}" \
+            --push \
+            --version "${{ steps.resolve-browser.outputs.version }}" \
+            --driver-url "${{ steps.resolve-driver.outputs.driver_url }}"
+
+      - name: Summary
+        if: always()
+        run: |
+          REVISION="${{ steps.resolve-browser.outputs.browser_revision }}"
+          EXISTED="${{ steps.check.outputs.exists }}"
+          OWNER="${{ github.repository_owner }}"
+          if [ "$EXISTED" = "true" ]; then
+            echo "::notice title=Up to date::ghcr.io/$OWNER/jelenoid:yandex-$REVISION and yandex-$REVISION-vnc already published. Nothing to do."
+          else
+            echo "::notice title=Built::ghcr.io/$OWNER/jelenoid:yandex-$REVISION and yandex-$REVISION-vnc published."
+          fi

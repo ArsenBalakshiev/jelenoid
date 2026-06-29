@@ -6,10 +6,11 @@ import (
 )
 
 type BrowserInfo struct {
-	Name            string `json:"name"`
-	Version         string `json:"version"`
-	DockerImageName string `json:"dockerImageName"`
-	IsDefault       bool   `json:"isDefault"`
+	Name             string `json:"name"`
+	Version          string `json:"version"`
+	DockerImageName  string `json:"dockerImageName"`
+	IsDefault        bool   `json:"isDefault"`
+	WireBrowserName  string `json:"wireBrowserName,omitempty"`
 }
 
 type ContainerInfo struct {
@@ -147,5 +148,6 @@ type BrowserEntry struct {
 }
 
 type BrowserVersionInfo struct {
-	Image string `json:"image"`
+	Image           string `json:"image"`
+	WireBrowserName string `json:"wireBrowserName,omitempty"`
 }

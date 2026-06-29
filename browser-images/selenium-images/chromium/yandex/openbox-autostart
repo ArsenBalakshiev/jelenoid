@@ -1,0 +1,7 @@
+#!/bin/sh
+# Minimal openbox autostart - keeps session alive, no wallpaper, no panel.
+# Selenoid-style: just the WM so Yandex has a real display.
+xset -dpms &
+xset s off &
+xset s noblank &
+exit 0
