@@ -111,7 +111,8 @@ func (s *ActiveSessionsService) ReleaseSlot() {
 	s.seleniumInProgress.Add(-1)
 }
 
-func (s *ActiveSessionsService) SessionSuccessfullyCreated(hubSessionID string, session *dto.SeleniumSession, proxy *httputil.ReverseProxy) {
+func (s *ActiveSessionsService) SessionSuccessfullyCreated(hubSessionID string, session *dto.SeleniumSession,
+	proxy *httputil.ReverseProxy) {
 	s.seleniumSessionsMu.Lock()
 	s.seleniumSessions[hubSessionID] = &sessionEntry{session: session, proxy: proxy}
 	s.seleniumSessionsMu.Unlock()
