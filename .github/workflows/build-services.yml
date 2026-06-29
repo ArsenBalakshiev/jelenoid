@@ -100,6 +100,10 @@ jobs:
       - name: Export OWNER (lowercased GitHub login for OCI image tag)
         run: |
           echo "OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+      # vite-envs плагин требует .env при npm run build; .env в .gitignore, поэтому
+      # копируем tracked-шаблон .env.example в build context.
+      - name: Provide .env for vite-envs
+        run: cp jelenoid-ui/.env.example jelenoid-ui/.env
       - name: Login to ghcr.io
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Build and push
