@@ -109,3 +109,17 @@ secrets/
 .eslintcache
 .stylelintcache
 .prettiercache
+
+jelenoid-server/tmp
+container-manager/tmp
+
+# jelenoid-server/browsers.json — артефакт air hot-reload (копия корневого
+# browsers.json в рабочей директории), и jelenoid-server-test — скомпилированный
+# бинарь. Их в репо быть не должно.
+jelenoid-server/browsers.json
+jelenoid-server/jelenoid-server-test
+
+# Python smoke-тесты оставляют __pycache__ и скриншоты рядом с .py/.sh.
+__pycache__/
+*.pyc
+last-vnc-screenshot.png

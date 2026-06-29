@@ -228,6 +228,7 @@ func (s *BrowserManagerService) readBrowsersFromFile() ([]*dto.BrowserInfo, erro
 				Version:         version,
 				DockerImageName: vi.Image,
 				IsDefault:       isDefault,
+				WireBrowserName: vi.WireBrowserName,
 			})
 		}
 	}
@@ -291,7 +292,11 @@ func (s *BrowserManagerService) snapshotToJSON(snap *browserSnapshot) []byte {
 			data[b.Name] = entry
 		}
 		versions := entry["versions"].(map[string]interface{})
-		versions[b.Version] = map[string]string{"image": b.DockerImageName}
+		versionEntry := map[string]string{"image": b.DockerImageName}
+		if b.WireBrowserName != "" {
+			versionEntry["wireBrowserName"] = b.WireBrowserName
+		}
+		versions[b.Version] = versionEntry
 		if b.IsDefault {
 			entry["default"] = b.Version
 		}

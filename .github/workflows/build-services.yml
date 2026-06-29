@@ -1,0 +1,96 @@
+name: Build and publish services on merge
+
+# Собирает и пушит в GHCR образы jelenoid-server, container-manager, jelenoid-ui
+# при пуше в main, но только если соответствующая папка менялась
+# (плюс сам workflow-файл как триггер обновления пайплайна).
+# Все три сервиса тегаются :<name>-latest. Использует self-hosted runner,
+# потому что сборка требует Docker-взаимодействия с локальным docker.sock
+# (для кэша модулей) и, в случае UI, прогоняет `npm ci` с реального registry.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      server: ${{ steps.filter.outputs.server }}
+      cm: ${{ steps.filter.outputs.cm }}
+      ui: ${{ steps.filter.outputs.ui }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed services
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            server:
+              - 'jelenoid-server/**'
+              - '.github/workflows/build-services.yml'
+            cm:
+              - 'container-manager/**'
+              - '.github/workflows/build-services.yml'
+            ui:
+              - 'jelenoid-ui/**'
+              - '.github/workflows/build-services.yml'
+
+  jelenoid-server:
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.server == 'true' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, jelenoid-runner]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login to ghcr.io
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Build and push
+        run: |
+          docker build \
+            -t "ghcr.io/${{ github.repository_owner }}/jelenoid:server-latest" \
+            ./jelenoid-server
+          docker push "ghcr.io/${{ github.repository_owner }}/jelenoid:server-latest"
+
+  container-manager:
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.cm == 'true' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, jelenoid-runner]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login to ghcr.io
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Build and push
+        run: |
+          docker build \
+            -t "ghcr.io/${{ github.repository_owner }}/jelenoid:container-manager-latest" \
+            ./container-manager
+          docker push "ghcr.io/${{ github.repository_owner }}/jelenoid:container-manager-latest"
+
+  jelenoid-ui:
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.ui == 'true' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, jelenoid-runner]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login to ghcr.io
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Build and push
+        run: |
+          docker build \
+            -t "ghcr.io/${{ github.repository_owner }}/jelenoid:ui-latest" \
+            ./jelenoid-ui
+          docker push "ghcr.io/${{ github.repository_owner }}/jelenoid:ui-latest"

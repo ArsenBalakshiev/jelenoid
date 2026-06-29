@@ -60,6 +60,7 @@ test-app          (Node, :3000) — подсобное приложение дл
 | `tests/`                            | Java 21 + Maven    | E2E/интеграционные/нагрузочные тесты (Selenium, Playwright, Selenide)      | active |
 | `test-app/`                         | Node 20 + Express  | Минимальный сайт для прогонов тестов (`host.docker.internal:3000`)         | вспомогательное |
 | `playwright_images/`                | Dockerfile         | Сборка кастомного образа Playwright + VNC (`suomessa/jelenoid:playwright-chromium-vnc-1.58.0`) | вспомогательное |
+| `browser-images/selenium-images/`   | Dockerfile + Python/Shell | Сборка браузерных образов для Selenium-хаба: `chromium/base` (debian + X11 libs), `chromium/chrome` (Chrome + chromedriver), `chromium/yandex` (Yandex Browser + YandexDriver) | **active** |
 | `browser-config/`, `build/`, `target/`, `playwright_images/` | — | Пустые/артефактные директории; не используются рантаймом                   | ignore |
 | `browsers.json`                     | JSON               | Каталог образов: `chrome`, `yandex`, `playwright` (default + versions)     | **активный** |
 | `docker-compose.yml`                | Compose v3.8       | Dev-стек: hot-reload для Go-сервисов (`.air`), UI в dev-режиме, test-app   | active |
@@ -169,6 +170,41 @@ Node/Express на 3000. Раздаёт статику из `public/` (15 HTML-с
 ### 4.6 `playwright_images/Dockerfile`
 `ubuntu:24.04` + Node 20 + `playwright@${PLAYWRIGHT_VERSION}` + `playwright install --with-deps chromium`. Собирает кастомный образ `suomessa/jelenoid:playwright-chromium-vnc-1.58.0`.
 
+### 4.7 `browser-images/selenium-images/` (Docker-образы браузеров)
+```
+chromium/
+├── base/
+│   ├── Dockerfile.base          # debian + system libs + dumb-init + non-root user
+│   ├── get-latest-chrome.sh     # resolves latest Stable Chrome from googlechromelabs
+│   └── build-base.sh            # → jelenoid/selenium-base:bookworm
+├── chrome/                      # headless-shell + chromedriver (см. §11 ниже)
+│   ├── Dockerfile               # headless
+│   ├── Dockerfile.vnc           # VNC (full Chrome)
+│   ├── cdp-proxy/               # Go WS proxy :7070 → chromedriver se:cdp
+│   ├── wd-proxy/                # Go reverse proxy :4444 → chromedriver
+│   ├── entrypoint.sh, start-headless.sh, start-vnc.sh, openbox-autostart
+│   ├── build.py                 # build + tag + (опционально) push
+│   ├── test.py                  # smoke-тест
+│   └── README.md
+└── yandex/                      # Yandex Browser + YandexDriver (бинарно-совместим с chromedriver)
+    ├── Dockerfile               # headless (yandex-browser --headless)
+    ├── Dockerfile.vnc           # VNC (полный Yandex + Xvfb + x11vnc)
+    ├── cdp-proxy/, wd-proxy/    # те же Go-бинарники, что и в chrome/ (бинарно совместимы)
+    ├── entrypoint.sh, start-headless.sh, start-vnc.sh, openbox-autostart
+    ├── managed_policies.json    # /etc/opt/yandex/browser/policies/managed — отключает SafeBrowsing/YandexProtect
+    ├── get-latest-yandex.sh     # резолвит latest Stable из apt-репо Яндекса
+    ├── build.py                 # build + резолв YandexDriver с GitHub по major.minor
+    ├── test.py                  # smoke-тест
+    └── README.md
+```
+
+**Главные отличия Yandex от Chrome:**
+- Браузер ставится из `https://repo.yandex.ru/yandex-browser/deb` (apt-репо Yandex).
+- YandexDriver скачивается с GitHub: `https://github.com/yandex/YandexDriver/releases`. **Linux-zip публикуется не в каждом релизе**, поэтому `build.py` фильтрует релизы по `major.minor` версии браузера и наличию `yandexdriver-…-linux.zip`.
+- В образ добавлен `managed_policies.json` (`SafeBrowsingProtectionLevel=0`, `YandexPhisingProtection=false`, `YandexProtectionMode=false`) — без него Yandex показывает "Ваше подключение не защищено" на любых self-signed/test TLS-эндпоинтах, и Selenium не может кликнуть "Proceed".
+- Внутри образа пути: `/opt/yandex/browser/yandex-browser`, `/opt/yandexdriver/yandexdriver`. Снаружи совместимости ради — `/usr/local/bin/google-chrome` (wrapper с `--no-sandbox --disable-gpu [--headless]`) и `/usr/local/bin/chromedriver` (symlink → yandexdriver).
+- `cdp-proxy` и `wd-proxy` — **те же Go-исходники**, что и в `chrome/`. Переиспользуются как есть, поскольку YandexDriver бинарно-совместим с chromedriver (W3C WebDriver + CDP).
+
 ---
 
 ## 5. Команды
@@ -271,7 +307,7 @@ mvn test -Dplaywright.ws=ws://localhost:4444/playwright-1.58.0 # версия pl
 ```jsonc
 {
   "chrome":     { "default": "133", "versions": { "133": { "image": "twilio/selenoid:chrome_stable_133" }, "138": { "image": "twilio/selenoid:chrome_stable_138" } } },
-  "yandex":     { "default": "133", "versions": { "133": { "image": "twilio/selenoid:yandex_stable_133" } } },
+  "yandex":     { "default": "26.4.1", "versions": { "133": { "image": "twilio/selenoid:yandex_stable_133" }, "26.4.1": { "image": "suomessa/jelenoid:yandex-26.4.1" }, "26.4.1-vnc": { "image": "suomessa/jelenoid:yandex-26.4.1-vnc" } } },
   "playwright": { "default": "1.58.0", "versions": { "1.53.0": { "image": "mcr.microsoft.com/playwright:v1.53.0" }, "1.58.0": { "image": "suomessa/jelenoid:playwright-chromium-vnc-1.58.0" } } }
 }
 ```
@@ -330,9 +366,16 @@ mvn test -Dplaywright.ws=ws://localhost:4444/playwright-1.58.0 # версия pl
 13. **В `tests/pom.xml` используется `playwright 1.58.0`** — должен совпадать с версией, зарегистрированной в `browsers.json` для ключа `playwright`.
 14. **Конфигурация UI в проде прокидывается через `vite-envs.sh`** (см. `jelenoid-ui/Dockerfile:16-21`). Если добавишь новую `VITE_*` переменную в `.env` — не забудь поддержать её в этом скрипте (см. комментарии в `vite.config.ts:1`).
 15. **`dev` compose использует общий Go module cache** (`go-mod-cache` volume). Если меняешь `go.mod` в одном из сервисов, пересобери оба.
-16. **CI/CD для Chrome-образов** — `.github/workflows/monthly-chrome-build.yml`: раз в месяц (1-го числа, 06:00 UTC) запускается на self-hosted runner `jelenoid-runner`, проверяет через GHCR API, есть ли уже тег `chrome-<Stable.version>` в `ghcr.io/<owner>/jelenoid`. Если нет — собирает оба варианта (headless + VNC) и пушит. Можно запустить вручную через `workflow_dispatch` с опциональным `--version`. Для остального кода CI/CD не настроен — проверки локальные: `npm run lint` (UI), `mvn -DskipTests package` (Java), `go build ./...` (Go), тесты — `cd tests && mvn test`.
+16. **CI/CD для Chrome-образов** — `.github/workflows/monthly-chrome-build.yml`: раз в месяц (1-го числа, 06:00 UTC) запускается на self-hosted runner `jelenoid-runner`, проверяет через GHCR API, есть ли уже тег `chrome-<Stable.version>` в `ghcr.io/<owner>/jelenoid`. Если нет — собирает оба варианта (headless + VNC) и пушит. Можно запустить вручную через `workflow_dispatch` с опциональным `--version`.
+17. **CI/CD для Yandex-образов** — `.github/workflows/monthly-yandex-build.yml`: полный аналог Chrome-флоу, но со сдвигом на 2-е число месяца (чтобы не упираться в self-hosted runner). Резолвит версию через `chromium/yandex/get-latest-yandex.sh` (apt-индекс Яндекса) и подбирает YandexDriver с GitHub по правилу major.minor (через `chromium/yandex/build.py::resolve_yandexdriver`). Теги: `yandex-<browser_revision>` + `yandex-latest`, плюс `-vnc` варианты. `workflow_dispatch` принимает `--version` (например `26.4.1.1110-1`) и `--driver-url` для полного пиннинга.
+18. **CI/CD для сервисов на merge в main** — `.github/workflows/build-services.yml`: пуш в `main` запускает `detect-changes` job (`dorny/paths-filter`) который определяет, какие из `jelenoid-server/`, `container-manager/`, `jelenoid-ui/` поменялись. Соответствующие job'ы (каждый с `if: needs.detect-changes.outputs.<svc> == 'true' || workflow_dispatch`) собирают и пушат тег `:<svc>-latest` в `ghcr.io/<owner>/jelenoid`. `workflow_dispatch` форсит все три (полезно для первоначальной публикации). Локальные проверки остаются: `npm run lint` (UI), `mvn -DskipTests package` (Java), `go build ./...` (Go), тесты — `cd tests && mvn test`.
 17. **Concurrent session creation semantics**: `ActiveSessionsService.TryReserveSlot()` — атомарный счётчик; если > лимита, откатывает. Если очередь включена — `OfferToQueue` в FIFO. При освобождении слота `DeleteSession` явно вызывает `ProcessQueue`.
 18. **`StatusService.BuildStatus()` всегда возвращает свежий срез** активных и queued сессий. `StatusNotifier.OnStatusChanged` триггерится из горутины в `cmd/server/main.go:144-158` с 100мс debounce — не вызывай `Broadcast` напрямую, используй `DispatchStatus()` или `statusChan`.
+19. **Yandex Browser требует `managed_policies.json`** в `/etc/opt/yandex/browser/policies/managed/` (см. `chromium/yandex/Dockerfile:103,143`). Без него на любом self-signed / test TLS-эндпоинте Yandex показывает предупреждение "Ваше подключение не защищено" с кнопкой "Подробнее", которую нельзя нормально кликнуть из Selenium. Если собираешь Yandex-образ — не забудь про этот файл.
+20. **YandexDriver публикуется не во всех релизах**: некоторые теги (например `v26.6.0-stable`) содержат только win64/mac zip, без linux. `chromium/yandex/build.py` фильтрует релизы по `major.minor` браузера + наличию linux-архива; если для актуальной версии такого нет — передай `--driver-url <url>` явно.
+21. **YandexDriver-linux-zip приходит без +x** (в отличие от Chrome for Testing). В `yandex-downloader` стадии обязательно `find /opt/yandexdriver -type f -name 'yandexdriver*' -exec chmod 0755 {} +` после `unzip`, иначе контейнер падает на `exec failed` при старте yandexdriver. Видно по `drw-r--r--` на самом бинаре.
+22. **COPY в Dockerfile не ставит +x на промежуточные директории** при создании пути. Для `managed_policies.json` (лежит в `/etc/opt/yandex/browser/policies/managed/`) все четыре уровня — `/etc/opt/yandex`, `/etc/opt/yandex/browser`, `/etc/opt/yandex/browser/policies`, `/etc/opt/yandex/browser/policies/managed` — создаются COPY-ом с `drw-r--r--` (без execute-бита), и Yandex Browser не может прочитать policies. Нужен явный `RUN chmod 0755 ...` после COPY. **Chmod должен быть в `USER root` блоке** — иначе jelenoid не сможет выставить бит (это была ошибка в VNC-варианте, где после `apt install xvfb` стоит `USER jelenoid`).
+23. **`test.py` импортирует `build.py`** для авто-резолва `YANDEXDRIVER_URL`. Если `test.py` запускается в окружении, где `build.py` нельзя импортировать (например, из другой CWD без `chromium/yandex/` в `sys.path`) — добавь этот каталог в `PYTHONPATH` или передавай `--driver-url` руками. Логика резолва живёт в одном месте — специально, чтобы правила major.minor не разъехались между сборкой и тестом.
 
 ---
 
@@ -405,6 +448,23 @@ docker-compose up -d --build --force-recreate
 1. `browsers.json` → добавить версию под `playwright.versions`.
 2. Сбилдить кастомный образ через `playwright_images/Dockerfile` (или использовать `mcr.microsoft.com/playwright:vX.Y.Z`).
 3. Тест-клиент подключается к `ws://hub:4444/playwright-X.Y.Z`.
+
+### Добавить/обновить версию Yandex
+1. `browsers.json` → добавить версию под `yandex.versions`.
+2. Сбилдить образ: `cd browser-images/selenium-images/chromium/yandex && python build.py --version <deb-версия, например 26.4.1.1110-1> --push`. `build.py` сам подтянет YandexDriver с GitHub по совпадению `major.minor`.
+3. Если в актуальных релизах YandexDriver нет linux-архива под нужный `major.minor` — передать URL вручную через `--driver-url <url>`.
+4. В `browsers.json` указать `image: suomessa/jelenoid:yandex-<browser-revision>` (например `yandex-26.4.1`).
+
+### Локально собрать только Yandex-образ
+```sh
+cd browser-images/selenium-images/chromium/base && ./build-base.sh
+cd ../yandex
+python build.py                          # headless + vnc, latest stable
+python build.py --no-vnc                 # только headless
+python build.py --version 26.4.1.1110-1  # закрепить deb-версию
+python test.py                           # smoke-тест локально
+python test.py --vnc                     # smoke-тест VNC-варианта
+```
 
 ### Изменить лимиты параллельности
 В `docker-compose-prod.yml` (или `docker-compose.yml` для dev) поменять `PARALLEL_SESSIONS`, `QUEUE_LIMIT`, `PLAYWRIGHT_SESSION_LIMIT`, `PLAYWRIGHT_QUEUE_LIMIT` для `jelenoid-server`.

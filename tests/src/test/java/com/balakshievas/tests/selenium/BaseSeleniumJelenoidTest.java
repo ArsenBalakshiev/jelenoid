@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.openqa.selenium.NoAlertPresentException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
+import org.openqa.selenium.remote.DesiredCapabilities;
 import org.openqa.selenium.remote.RemoteWebDriver;
 
 import java.net.MalformedURLException;
@@ -32,6 +33,25 @@ public class BaseSeleniumJelenoidTest {
         }
 
         WebDriver driver = new RemoteWebDriver(new URL(HUB_URL), options);
+        driverThreadLocal.set(driver);
+        return driver;
+    }
+
+    protected WebDriver createDriverYandex(ChromeOptions specificOptions) throws MalformedURLException {
+        DesiredCapabilities caps = new DesiredCapabilities();
+        caps.setBrowserName("yandex");
+        caps.setVersion(System.getProperty("yandex.version", "26.4.1.1110"));
+        caps.setCapability("unhandledPromptBehavior", "accept");
+
+        Map<String, Object> selenoidOptions = new HashMap<>();
+        selenoidOptions.put("enableVNC", true);
+        caps.setCapability("selenoid:options", selenoidOptions);
+        if (specificOptions != null) {
+            caps.merge(specificOptions);
+        }
+        caps.setBrowserName("yandex");
+
+        WebDriver driver = new RemoteWebDriver(new URL(HUB_URL), caps);
         driverThreadLocal.set(driver);
         return driver;
     }
