@@ -22,6 +22,10 @@ permissions:
   contents: read
   packages: write
 
+# GHCR требует lowercase; ${{ github.repository_owner }} сохраняет регистр.
+env:
+  OWNER: ${{ github.repository_owner | lower }}
+
 jobs:
   build-chrome:
     runs-on: [self-hosted, jelenoid-runner]
@@ -55,7 +59,7 @@ jobs:
         run: |
           set -eu
           VERSION="${{ steps.resolve.outputs.version }}"
-          OWNER="${{ github.repository_owner }}"
+          OWNER="${OWNER}"
           TAG_HEADLESS="chrome-$VERSION"
           TAG_VNC="chrome-$VERSION-vnc"
           # In GHCR, ghcr.io/<owner>/jelenoid:chrome-<version> is one package
@@ -113,14 +117,14 @@ jobs:
         run: |
           set -eu
           cd browser-images/selenium-images/chromium/chrome
-          python3 build.py --registry "ghcr.io/${{ github.repository_owner }}" --push --version "${{ steps.resolve.outputs.version }}"
+          python3 build.py --registry "ghcr.io/${OWNER}" --push --version "${{ steps.resolve.outputs.version }}"
 
       - name: Summary
         if: always()
         run: |
           VERSION="${{ steps.resolve.outputs.version }}"
           EXISTED="${{ steps.check.outputs.exists }}"
-          OWNER="${{ github.repository_owner }}"
+          OWNER="${OWNER}"
           if [ "$EXISTED" = "true" ]; then
             echo "::notice title=Up to date::ghcr.io/$OWNER/jelenoid:chrome-$VERSION and chrome-$VERSION-vnc already published. Nothing to do."
           else
