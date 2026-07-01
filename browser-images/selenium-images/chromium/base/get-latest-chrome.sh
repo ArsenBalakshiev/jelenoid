@@ -1,7 +1,4 @@
 #!/bin/sh
-# Резолвит последнюю Stable-версию Chrome для linux64.
-# Используется в Dockerfile как часть chrome-downloader стадии.
-# Принимает опционально CHROME_VERSION_JSON_URL для override (полезно для CI).
 
 set -eu
 
@@ -16,12 +13,6 @@ if ! command -v python3 >/dev/null 2>&1; then
     echo "python3 required" >&2
     exit 1
 fi
-
-# Скачиваем JSON, парсим, выводим в формате shell-переменных:
-#   CHROME_VERSION=<version>
-#   CHROME_URL=<chrome download url for linux64>
-#   CHROMEDRIVER_URL=<chromedriver download url for linux64>
-#   HEADLESS_SHELL_URL=<chrome-headless-shell download url for linux64>
 
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT

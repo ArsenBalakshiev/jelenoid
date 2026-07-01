@@ -1,6 +1,6 @@
 {
   "chrome": {
-    "default": "150",
+    "default": "latest",
     "versions": {
       "133": {
         "image": "twilio/selenoid:chrome_stable_133"
@@ -8,24 +8,23 @@
       "138": {
         "image": "twilio/selenoid:chrome_stable_138"
       },
-      "150": {
-        "image": "suomessa/jelenoid:chrome-150.0.7871.24-vnc"
+      "latest": {
+        "image": "suomessa/jelenoid:chrome-latest"
+      },
+      "latest-vnc": {
+        "image": "suomessa/jelenoid:chrome-latest-vnc"
       }
     }
   },
   "yandex" : {
-    "default": "26.4.1.1110",
+    "default": "latest",
     "versions": {
-      "133": {
-        "image": "twilio/selenoid:yandex_stable_133",
+      "latest": {
+        "image": "suomessa/jelenoid:yandex-latest",
         "wireBrowserName": "chrome"
       },
-      "26.4.1.1110": {
-        "image": "suomessa/jelenoid:yandex-26.4.1.1110",
-        "wireBrowserName": "chrome"
-      },
-      "26.4.1.1110-vnc": {
-        "image": "suomessa/jelenoid:yandex-26.4.1.1110-vnc",
+      "latest-vnc": {
+        "image": "suomessa/jelenoid:yandex-latest-vnc",
         "wireBrowserName": "chrome"
       }
     }

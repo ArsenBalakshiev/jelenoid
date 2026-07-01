@@ -1,5 +1,4 @@
 #!/bin/sh
-# Fast init для headless-варианта Chrome-контейнера.
 set -eu
 
 export HOME=/home/jelenoid

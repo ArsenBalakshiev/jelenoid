@@ -1,5 +1,4 @@
 #!/bin/sh
-# Fast init для headless-варианта Yandex-контейнера.
 set -eu
 
 export HOME=/home/jelenoid

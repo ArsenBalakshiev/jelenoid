@@ -21,7 +21,7 @@ public class BaseSeleniumJelenoidTest {
 
     protected WebDriver createDriver(ChromeOptions specificOptions) throws MalformedURLException {
         ChromeOptions options = new ChromeOptions();
-        options.setBrowserVersion("150");
+        options.setBrowserVersion("latest-vnc");
         options.setCapability("unhandledPromptBehavior", "accept");
 
         Map<String, Object> selenoidOptions = new HashMap<>();
@@ -40,7 +40,7 @@ public class BaseSeleniumJelenoidTest {
     protected WebDriver createDriverYandex(ChromeOptions specificOptions) throws MalformedURLException {
         DesiredCapabilities caps = new DesiredCapabilities();
         caps.setBrowserName("yandex");
-        caps.setVersion(System.getProperty("yandex.version", "26.4.1.1110"));
+        caps.setVersion("latest-vnc");
         caps.setCapability("unhandledPromptBehavior", "accept");
 
         Map<String, Object> selenoidOptions = new HashMap<>();

@@ -553,7 +553,7 @@ class SeleniumE2ETest extends BaseSeleniumJelenoidTest {
     @Test
     @DisplayName("E2E: Создание сессии с конкретной версией Chrome")
     void shouldCreateSessionWithSpecificBrowserVersion() throws MalformedURLException {
-        WebDriver driver = createDriver(new ChromeOptions(), "133");
+        WebDriver driver = createDriver(new ChromeOptions(), "latest");
 
         driver.get(TEST_APP_BASE + "/");
         assertEquals("Test App", driver.getTitle());

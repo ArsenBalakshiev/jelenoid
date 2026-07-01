@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   jelenoid-server:
-    image: suomessa/jelenoid:server-latest
+    image: ghcr.io/arsenbalakshiev/jelenoid:server-latest
     container_name: jelenoid-server
     ports:
       - "4444:4444"
@@ -29,7 +29,7 @@ services:
       - jelenoid-net
 
   container-manager:
-    image: suomessa/jelenoid:container-manager-latest
+    image: ghcr.io/arsenbalakshiev/jelenoid:container-manager-latest
     container_name: container-manager
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

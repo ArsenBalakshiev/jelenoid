@@ -1,6 +1,4 @@
 #!/bin/sh
-# Entrypoint: подготавливает runtime и exec CMD.
-# В VNC-варианте создаёт файл пароля (selenoid по умолчанию).
 
 set -eu
 
