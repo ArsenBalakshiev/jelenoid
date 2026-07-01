@@ -2,17 +2,14 @@
   "chrome": {
     "default": "latest",
     "versions": {
-      "133": {
-        "image": "twilio/selenoid:chrome_stable_133"
-      },
       "138": {
         "image": "twilio/selenoid:chrome_stable_138"
       },
       "latest": {
-        "image": "suomessa/jelenoid:chrome-latest"
+        "image": "ghcr.io/arsenbalakshiev/jelenoid:chrome-latest"
       },
       "latest-vnc": {
-        "image": "suomessa/jelenoid:chrome-latest-vnc"
+        "image": "ghcr.io/arsenbalakshiev/jelenoid:chrome-latest-vnc"
       }
     }
   },
@@ -20,11 +17,11 @@
     "default": "latest",
     "versions": {
       "latest": {
-        "image": "suomessa/jelenoid:yandex-latest",
+        "image": "ghcr.io/arsenbalakshiev/jelenoid:yandex-latest",
         "wireBrowserName": "chrome"
       },
       "latest-vnc": {
-        "image": "suomessa/jelenoid:yandex-latest-vnc",
+        "image": "ghcr.io/arsenbalakshiev/jelenoid:yandex-latest-vnc",
         "wireBrowserName": "chrome"
       }
     }
