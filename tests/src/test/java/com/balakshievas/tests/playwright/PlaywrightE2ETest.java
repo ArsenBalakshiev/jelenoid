@@ -539,6 +539,39 @@ class PlaywrightE2ETest extends BasePlaywrightJelenoidTest {
     }
 
     @Test
+    @DisplayName("E2E: Долгий сценарий — 240 итераций slow.html (≈20 минут)")
+    void shouldRunLongLivedScenario() {
+        final int iterations = Integer.parseInt(
+                System.getProperty("long.iterations", "240"));
+        final long perIterationMs = 5_000L;
+
+        Page page = createPage(JELENOID_WS);
+        page.setDefaultTimeout(10_000);
+
+        page.navigate(TEST_APP_BASE + "/slow.html");
+
+        long start = System.nanoTime();
+
+        for (int i = 1; i <= iterations; i++) {
+            page.locator("#startBtn").waitFor(new Locator.WaitForOptions().setState(WaitForSelectorState.VISIBLE));
+            page.locator("#startBtn").click();
+            page.locator("#result").waitFor(new Locator.WaitForOptions().setState(WaitForSelectorState.VISIBLE));
+
+            String text = page.locator("#result").textContent();
+            assertEquals("Done!", text);
+
+            page.navigate(TEST_APP_BASE + "/slow.html");
+        }
+
+        long elapsedMs = (System.nanoTime() - start) / 1_000_000L;
+        long expectedMs = iterations * perIterationMs;
+        long toleranceMs = 60_000L;
+
+        assertTrue(elapsedMs >= expectedMs - toleranceMs,
+                "тест должен реально длиться ~20 минут, прошло " + elapsedMs + "ms");
+    }
+
+    @Test
     @DisplayName("E2E: Navigation to all test-app pages")
     void shouldNavigateToAllPages() {
         Page page = createPage(JELENOID_WS);

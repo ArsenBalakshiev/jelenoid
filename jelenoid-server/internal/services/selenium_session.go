@@ -74,7 +74,7 @@ func (s *SeleniumSessionService) CreateSessionOrQueue(requestBody map[string]int
 		result, err := s.createSessionInternal(requestBody)
 		if err != nil {
 			s.activeSessions.ReleaseSlot()
-			s.ProcessQueue()
+			go s.ProcessQueue()
 			return nil, err
 		}
 		return result, nil
@@ -215,7 +215,7 @@ func (s *SeleniumSessionService) DeleteSession(hubSessionID string) {
 	s.dispatchStatusUpdate()
 	if session != nil {
 		go s.dockerService.StopContainer(session.ContainerInfo.ContainerID)
-		s.ProcessQueue()
+		go s.ProcessQueue()
 	}
 }
 

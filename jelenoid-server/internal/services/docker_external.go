@@ -17,6 +17,7 @@ import (
 type DockerExternalService struct {
 	containerManagerAddr string
 	httpClient           *http.Client
+	streamClient         *http.Client
 }
 
 func NewDockerExternalService(containerManagerAddr string) *DockerExternalService {
@@ -25,6 +26,7 @@ func NewDockerExternalService(containerManagerAddr string) *DockerExternalServic
 		httpClient: &http.Client{
 			Timeout: 120 * time.Second,
 		},
+		streamClient: &http.Client{},
 	}
 }
 
@@ -129,7 +131,7 @@ func (s *DockerExternalService) StreamContainerLogs(ctx context.Context, contain
 	}
 	req.Header.Set("Accept", "text/event-stream")
 
-	resp, err := s.httpClient.Do(req)
+	resp, err := s.streamClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
