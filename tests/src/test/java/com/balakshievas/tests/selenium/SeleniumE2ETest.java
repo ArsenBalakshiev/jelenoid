@@ -560,6 +560,40 @@ class SeleniumE2ETest extends BaseSeleniumJelenoidTest {
     }
 
     @Test
+    @DisplayName("E2E: Долгий сценарий — 240 итераций slow.html (≈20 минут)")
+    void shouldRunLongLivedScenario() throws MalformedURLException {
+        final int iterations = Integer.parseInt(
+                System.getProperty("long.iterations", "240"));
+        final Duration perIteration = Duration.ofSeconds(5);
+
+        WebDriver driver = createDriver(new ChromeOptions());
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+
+        driver.get(TEST_APP_BASE + "/slow.html");
+
+        long start = System.nanoTime();
+
+        for (int i = 1; i <= iterations; i++) {
+            WebElement startBtn = wait.until(ExpectedConditions.elementToBeClickable(By.id("startBtn")));
+            startBtn.click();
+
+            wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("result")));
+
+            String buttonText = driver.findElement(By.id("startBtn")).getText();
+            assertEquals("Start loading", buttonText);
+
+            driver.navigate().refresh();
+        }
+
+        long elapsedMs = (System.nanoTime() - start) / 1_000_000L;
+        long expectedMs = iterations * perIteration.toMillis();
+        long toleranceMs = Duration.ofMinutes(1).toMillis();
+
+        assertTrue(elapsedMs >= expectedMs - toleranceMs,
+                "тест должен реально длиться ~20 минут, прошло " + elapsedMs + "ms");
+    }
+
+    @Test
     @DisplayName("E2E: Navigation to all test-app pages")
     void shouldNavigateToAllPages() throws MalformedURLException {
         WebDriver driver = createDriver(new ChromeOptions());

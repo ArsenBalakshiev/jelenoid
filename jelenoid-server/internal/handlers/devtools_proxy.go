@@ -64,11 +64,21 @@ func (h *DevToolsProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	}
 	defer containerConn.Close()
 
-	var wg sync.WaitGroup
-	wg.Add(2)
+	var closeOnce sync.Once
+	closeBoth := func() {
+		closeOnce.Do(func() {
+			clientConn.Close()
+			containerConn.Close()
+		})
+	}
+
+	done := make(chan struct{}, 2)
 
 	go func() {
-		defer wg.Done()
+		defer func() {
+			closeBoth()
+			done <- struct{}{}
+		}()
 		for {
 			messageType, message, err := containerConn.ReadMessage()
 			if err != nil {
@@ -81,7 +91,10 @@ func (h *DevToolsProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	}()
 
 	go func() {
-		defer wg.Done()
+		defer func() {
+			closeBoth()
+			done <- struct{}{}
+		}()
 		for {
 			messageType, message, err := clientConn.ReadMessage()
 			if err != nil {
@@ -93,5 +106,5 @@ func (h *DevToolsProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		}
 	}()
 
-	wg.Wait()
+	<-done
 }

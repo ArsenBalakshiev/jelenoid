@@ -10,6 +10,12 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const (
+	vncWsReadDeadline  = 90 * time.Second
+	vncWsPingInterval  = 30 * time.Second
+	vncWsWriteTimeout  = 10 * time.Second
+)
+
 type VncProxyHandler struct {
 	activeSessions *services.ActiveSessionsService
 	upgrader       websocket.Upgrader
@@ -65,40 +71,65 @@ func (h *VncProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer vncConn.Close()
 
-	var wg sync.WaitGroup
-	wg.Add(2)
+	var closeOnce sync.Once
+	closeBoth := func() {
+		closeOnce.Do(func() {
+			clientConn.Close()
+			vncConn.Close()
+		})
+	}
+
+	clientConn.SetReadDeadline(time.Now().Add(vncWsReadDeadline))
+	clientConn.SetPongHandler(func(string) error {
+		clientConn.SetReadDeadline(time.Now().Add(vncWsReadDeadline))
+		return nil
+	})
+
+	done := make(chan struct{}, 2)
 
 	go func() {
-		defer wg.Done()
+		defer func() {
+			closeBoth()
+			done <- struct{}{}
+		}()
 		buf := vncBufPool.Get().([]byte)
 		defer vncBufPool.Put(buf)
 		for {
-			vncConn.SetReadDeadline(time.Now().Add(30 * time.Second))
 			n, err := vncConn.Read(buf)
 			if err != nil {
-				break
+				return
 			}
 			if err := clientConn.WriteMessage(websocket.BinaryMessage, buf[:n]); err != nil {
-				break
+				return
 			}
 		}
 	}()
 
 	go func() {
-		defer wg.Done()
+		defer func() {
+			closeBoth()
+			done <- struct{}{}
+		}()
+		pingTick := time.NewTicker(vncWsPingInterval)
+		defer pingTick.Stop()
 		for {
-			clientConn.SetReadDeadline(time.Now().Add(30 * time.Second))
+			clientConn.SetReadDeadline(time.Now().Add(vncWsReadDeadline))
 			messageType, message, err := clientConn.ReadMessage()
 			if err != nil {
-				break
+				return
 			}
 			if messageType == websocket.BinaryMessage {
 				if _, err := vncConn.Write(message); err != nil {
-					break
+					return
 				}
+			}
+			select {
+			case <-pingTick.C:
+				_ = clientConn.WriteControl(websocket.PingMessage, nil, time.Now().Add(vncWsWriteTimeout))
+			default:
 			}
 		}
 	}()
 
-	wg.Wait()
+	<-done
 }
